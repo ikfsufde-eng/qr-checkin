@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0a0f1e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>QR Check-in</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* ── RESET & BASE ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0a0f1e;
+  --surface:   #111827;
+  --surface2:  #1f2937;
+  --border:    #2d3748;
+  --accent:    #00d4aa;
+  --accent2:   #0ea5e9;
+  --danger:    #f43f5e;
+  --warn:      #f59e0b;
+  --text:      #e2e8f0;
+  --muted:     #64748b;
+  --green:     #10b981;
+  --radius:    16px;
+  --font-head: 'Sora', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+}
+
+html, body {
+  height: 100%; width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-head);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── LAYOUT ── */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+}
+
+/* ── HEADER ── */
+header {
+  flex-shrink: 0;
+  padding: 14px 18px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 10;
+}
+.logo {
+  width: 38px; height: 38px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.header-text h1 { font-size: 15px; font-weight: 700; letter-spacing: 0.2px; }
+.header-text p  { font-size: 11px; color: var(--muted); margin-top: 1px; font-family: var(--font-mono); }
+.pulse-dot {
+  margin-left: auto;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex-shrink: 0;
+  transition: background 0.4s, box-shadow 0.4s;
+}
+.pulse-dot.on  { background: var(--accent); box-shadow: 0 0 0 3px rgba(0,212,170,.25); animation: pulse 2s infinite; }
+.pulse-dot.err { background: var(--danger); box-shadow: 0 0 0 3px rgba(244,63,94,.2); }
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 3px rgba(0,212,170,.25); } 50% { box-shadow: 0 0 0 6px rgba(0,212,170,.08); } }
+
+/* ── GAS URL SETUP ── */
+#setup-screen {
+  position: absolute; inset: 0;
+  background: var(--bg);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 22px;
+  gap: 16px;
+  text-align: center;
+}
+#setup-screen .setup-icon { font-size: 48px; }
+#setup-screen h2 { font-size: 20px; font-weight: 700; }
+#setup-screen p  { font-size: 13px; color: var(--muted); line-height: 1.65; }
+#gas-url-input {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 13px 14px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+#gas-url-input:focus { border-color: var(--accent); }
+#gas-url-input::placeholder { color: var(--muted); }
+#btn-save-url {
+  width: 100%;
+  padding: 15px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: #000;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 15px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.note-box {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent2);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: left;
+  line-height: 1.8;
+}
+.note-box b { color: var(--text); }
+.note-box code { color: var(--accent); font-family: var(--font-mono); font-size: 11px; }
+
+/* ── KAMERA AREA ── */
+#cam-wrap {
+  flex: 1;
+  position: relative;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+#cam-video {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Viewfinder overlay */
+#viewfinder {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  z-index: 5;
+}
+.vf {
+  width: min(260px, 68vw);
+  height: min(260px, 68vw);
+  position: relative;
+}
+.vf::before { /* shade luar */
+  content: '';
+  position: fixed; inset: 0;
+  background: rgba(10,15,30,.55);
+  /* punch hole via clip-path tidak mungkin — pakai box-shadow trick */
+  box-shadow: 0 0 0 100vmax rgba(10,15,30,.55);
+  pointer-events: none;
+}
+.corner {
+  position: absolute;
+  width: 26px; height: 26px;
+  border-color: var(--accent);
+  border-style: solid;
+}
+.corner.tl { top:0; left:0;  border-width: 3px 0 0 3px; border-radius: 5px 0 0 0; }
+.corner.tr { top:0; right:0; border-width: 3px 3px 0 0; border-radius: 0 5px 0 0; }
+.corner.bl { bottom:0; left:0;  border-width: 0 0 3px 3px; border-radius: 0 0 0 5px; }
+.corner.br { bottom:0; right:0; border-width: 0 3px 3px 0; border-radius: 0 0 5px 0; }
+.scan-beam {
+  position: absolute;
+  left: 3px; right: 3px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  filter: blur(1px);
+  top: 0;
+  animation: beam 2.2s cubic-bezier(.4,0,.6,1) infinite;
+}
+@keyframes beam { 0% { top: 0; opacity:.9; } 50%{ opacity:1; } 100% { top: 100%; opacity:.2; } }
+
+/* Overlay izin kamera */
+#perm-overlay {
+  position: absolute; inset: 0;
+  background: rgba(10,15,30,.97);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 22px;
+  text-align: center;
+  gap: 14px;
+  z-index: 20;
+}
+#perm-overlay .perm-icon { font-size: 54px; }
+#perm-overlay h2 { font-size: 18px; font-weight: 700; }
+#perm-overlay p  { font-size: 13px; color: var(--muted); line-height: 1.65; }
+
+/* ── HASIL SCAN ── */
+#result-wrap {
+  flex-shrink: 0;
+  padding: 12px 14px 8px;
+}
+#result {
+  border-radius: 12px;
+  padding: 13px 15px;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-height: 54px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  transition: background .3s, border-color .3s, color .3s;
+}
+#result.ok      { background:#052e1c; border-color:var(--green); color:#6ee7b7; }
+#result.err     { background:#1f0813; border-color:var(--danger); color:#fda4af; }
+#result.loading { background:#1c1405; border-color:var(--warn); color:#fde68a; }
+
+/* ── TOMBOL ── */
+#btns {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 0 14px 18px;
+}
+.btn {
+  padding: 13px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-head);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: opacity .15s, transform .1s;
+  -webkit-tap-highlight-color: transparent;
+  letter-spacing: 0.2px;
+}
+.btn:active { transform: scale(0.96); opacity: .8; }
+#btn-restart { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+#btn-copy    { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+#btn-config  { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+#btn-reset   { background: #2d0a14; color: #fda4af; border: 1px solid #7f1d1d; grid-column: span 2; }
+#btn-allow   { background: linear-gradient(135deg, var(--accent2), var(--accent)); color:#000; font-weight:700; width:100%; padding:15px; border-radius:12px; border:none; margin-top:4px; font-size:15px; font-family:var(--font-head); cursor:pointer; }
+
+/* ── CANVAS (tersembunyi, untuk decode QR) ── */
+#qr-canvas { display: none; }
+
+/* ── ANIMASI MASUK ── */
+@keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
+header, #result-wrap, #btns { animation: fadeUp .4s ease both; }
+header        { animation-delay: .05s; }
+#result-wrap  { animation-delay: .12s; }
+#btns         { animation-delay: .18s; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- SETUP SCREEN: masukkan GAS URL -->
+  <div id="setup-screen">
+    <div class="setup-icon">⚙️</div>
+    <h2>Konfigurasi Web App</h2>
+    <p>Masukkan URL Google Apps Script Web App kamu agar scanner bisa terhubung ke Google Sheet.</p>
+    <input id="gas-url-input" type="url" placeholder="https://script.google.com/macros/s/...../exec" autocomplete="off" spellcheck="false">
+    <button id="btn-save-url">Simpan & Mulai Scanner</button>
+    <div class="note-box">
+      <b>Cara dapat URL ini:</b><br>
+      1. Buka <b>Apps Script</b> → <b>Deploy</b> → <b>New deployment</b><br>
+      2. Type: <b>Web App</b><br>
+      3. Execute as: <b>Me</b><br>
+      4. Who has access: <b>Anyone</b><br>
+      5. Copy URL yang muncul, paste di atas<br><br>
+      <b>Penting:</b> Setiap update <code>Code.gs</code>, buat deployment baru agar URL tetap valid.
+    </div>
+  </div>
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">📡</div>
+    <div class="header-text">
+      <h1>QR Check-in</h1>
+      <p id="url-label">Menghubungkan…</p>
+    </div>
+    <div class="pulse-dot" id="dot"></div>
+  </header>
+
+  <!-- KAMERA -->
+  <div id="cam-wrap">
+    <video id="cam-video" autoplay playsinline muted></video>
+    <canvas id="qr-canvas"></canvas>
+
+    <!-- Viewfinder -->
+    <div id="viewfinder">
+      <div class="vf">
+        <div class="corner tl"></div>
+        <div class="corner tr"></div>
+        <div class="corner bl"></div>
+        <div class="corner br"></div>
+        <div class="scan-beam"></div>
+      </div>
+    </div>
+
+    <!-- Overlay izin ditolak -->
+    <div id="perm-overlay">
+      <div class="perm-icon">🚫</div>
+      <h2>Akses Kamera Ditolak</h2>
+      <p>Chrome membutuhkan izin kamera. Ikuti langkah berikut:</p>
+      <div class="note-box" style="text-align:left">
+        <b>Di Chrome Android:</b><br>
+        Ketuk 🔒 di address bar → <b>Izin Situs</b> → <b>Kamera</b> → <b>Izinkan</b> → Reload<br><br>
+        <b>Di Chrome Desktop:</b><br>
+        Klik 🔒/📷 di address bar → <b>Camera</b> → <b>Allow</b> → Reload<br><br>
+        <b>Pastikan</b> halaman dibuka via HTTPS (GitHub Pages sudah HTTPS otomatis).
+      </div>
+      <button class="btn" id="btn-allow">🎥 Coba Lagi</button>
+    </div>
+  </div>
+
+  <!-- HASIL -->
+  <div id="result-wrap">
+    <div id="result" class="info">📷 Memulai kamera…</div>
+  </div>
+
+  <!-- TOMBOL -->
+  <div id="btns">
+    <button class="btn" id="btn-restart">🔄 Restart</button>
+    <button class="btn" id="btn-copy">📋 Salin</button>
+    <button class="btn" id="btn-config">⚙️ Config</button>
+    <button class="btn" id="btn-reset">⏹️ Reset ID Terakhir</button>
+  </div>
+
+</div>
+
+<!-- jsQR untuk decode QR tanpa iframe -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>
+// ═══════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════
+var STORAGE_KEY = 'qr_checkin_gas_url';
+var gasUrl      = localStorage.getItem(STORAGE_KEY) || '';
+
+// ═══════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════
+var video        = document.getElementById('cam-video');
+var canvas       = document.getElementById('qr-canvas');
+var ctx          = canvas.getContext('2d');
+var stream       = null;
+var rafId        = null;
+var isProcessing = false;
+var lastScanned  = null;
+var cooldownUntil= 0;
+
+// ═══════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════
+function setResult(text, cls) {
+  var el = document.getElementById('result');
+  el.className = cls || 'info';
+  el.textContent = text;
+}
+
+function setDot(state) {
+  var d = document.getElementById('dot');
+  d.className = 'pulse-dot' + (state ? ' ' + state : '');
+}
+
+function showPerm(show) {
+  document.getElementById('perm-overlay').style.display = show ? 'flex' : 'none';
+}
+
+function showSetup(show) {
+  document.getElementById('setup-screen').style.display = show ? 'flex' : 'none';
+}
+
+function updateUrlLabel() {
+  var label = document.getElementById('url-label');
+  if (gasUrl) {
+    var short = gasUrl.replace('https://script.google.com/macros/s/', '').substring(0, 18) + '…';
+    label.textContent = short;
+  } else {
+    label.textContent = 'Belum dikonfigurasi';
+  }
+}
+
+// ═══════════════════════════════════════════
+//  SETUP SCREEN
+// ═══════════════════════════════════════════
+function checkSetup() {
+  if (!gasUrl) {
+    showSetup(true);
+    return false;
+  }
+  showSetup(false);
+  updateUrlLabel();
+  return true;
+}
+
+document.getElementById('btn-save-url').addEventListener('click', function() {
+  var val = document.getElementById('gas-url-input').value.trim();
+  if (!val.startsWith('https://script.google.com/macros/s/')) {
+    alert('❌ URL tidak valid. Harus dimulai dengan:\nhttps://script.google.com/macros/s/');
+    return;
+  }
+  gasUrl = val;
+  localStorage.setItem(STORAGE_KEY, gasUrl);
+  showSetup(false);
+  updateUrlLabel();
+  startCamera();
+});
+
+document.getElementById('btn-config').addEventListener('click', function() {
+  document.getElementById('gas-url-input').value = gasUrl || '';
+  showSetup(true);
+});
+
+// ═══════════════════════════════════════════
+//  KAMERA — pakai getUserMedia langsung (bukan library)
+// ═══════════════════════════════════════════
+function startCamera() {
+  stopCamera();
+  showPerm(false);
+  setDot('');
+  setResult('📷 Meminta izin kamera…', 'info');
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setResult('❌ Browser tidak mendukung kamera.\nGunakan Chrome/Safari versi terbaru.', 'err');
+    setDot('err');
+    return;
+  }
+
+  navigator.mediaDevices.getUserMedia({
+    video: {
+      facingMode: { ideal: 'environment' },
+      width:  { ideal: 1280 },
+      height: { ideal: 720 }
+    },
+    audio: false
+  })
+  .then(function(s) {
+    stream = s;
+    video.srcObject = s;
+    video.onloadedmetadata = function() {
+      video.play();
+      setDot('on');
+      setResult('📷 Kamera siap. Arahkan ke QR Code.', 'info');
+      scanLoop();
+    };
+  })
+  .catch(function(err) {
+    var msg = '';
+    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      showPerm(true);
+      msg = '🚫 Kamera diblokir. Lihat panduan di atas.';
+    } else if (err.name === 'NotFoundError') {
+      msg = '❌ Tidak ada kamera ditemukan di perangkat ini.';
+    } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+      msg = '⚠️ Kamera sedang dipakai aplikasi lain. Tutup aplikasi lain lalu restart.';
+    } else if (err.name === 'OverconstrainedError') {
+      // Coba tanpa constraint facingMode
+      fallbackCamera();
+      return;
+    } else {
+      msg = '⚠️ Gagal akses kamera: ' + err.name + ' — ' + err.message;
+    }
+    setResult(msg, 'err');
+    setDot('err');
+  });
+}
+
+// Fallback: coba tanpa facing mode (beberapa HP butuh ini)
+function fallbackCamera() {
+  navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+  .then(function(s) {
+    stream = s;
+    video.srcObject = s;
+    video.onloadedmetadata = function() {
+      video.play();
+      setDot('on');
+      setResult('📷 Kamera siap (mode fallback). Arahkan ke QR Code.', 'info');
+      scanLoop();
+    };
+  })
+  .catch(function(err) {
+    setResult('❌ Tidak bisa akses kamera: ' + err.message, 'err');
+    setDot('err');
+  });
+}
+
+function stopCamera() {
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  if (stream) {
+    stream.getTracks().forEach(function(t) { t.stop(); });
+    stream = null;
+  }
+  video.srcObject = null;
+}
+
+// ═══════════════════════════════════════════
+//  QR SCAN LOOP — pakai jsQR, tanpa library berat
+// ═══════════════════════════════════════════
+function scanLoop() {
+  rafId = requestAnimationFrame(function() {
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      var w = video.videoWidth;
+      var h = video.videoHeight;
+      canvas.width  = w;
+      canvas.height = h;
+      ctx.drawImage(video, 0, 0, w, h);
+
+      var now = Date.now();
+      if (!isProcessing && now >= cooldownUntil) {
+        var imageData = ctx.getImageData(0, 0, w, h);
+        var code = jsQR(imageData.data, w, h, { inversionAttempts: 'dontInvert' });
+        if (code && code.data) {
+          handleScan(code.data);
+        }
+      }
+    }
+    scanLoop();
+  });
+}
+
+// ═══════════════════════════════════════════
+//  HANDLE SCAN
+// ═══════════════════════════════════════════
+function handleScan(decodedText) {
+  var id = String(decodedText).trim();
+  if (!id) return;
+
+  isProcessing = true;
+  lastScanned  = id;
+  setResult('⏳ Memproses ID: ' + id + '…', 'loading');
+  setDot('');
+
+  if (!gasUrl) {
+    setResult('⚠️ GAS URL belum diatur. Ketuk ⚙️ Config.', 'err');
+    isProcessing = false;
+    setDot('on');
+    return;
+  }
+
+  fetch(gasUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' }, // GAS tidak support application/json di CORS
+    body: JSON.stringify({ action: 'checkin', id: id })
+  })
+  .then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  })
+  .then(function(res) {
+    if (res && res.status === 'success') {
+      setResult(res.message, 'ok');
+      setDot('on');
+    } else {
+      setResult((res && res.message) || 'Terjadi kesalahan.', 'err');
+      setDot('err');
+    }
+    cooldownUntil = Date.now() + 3500;
+    setTimeout(function() {
+      isProcessing = false;
+      setDot('on');
+      setResult('📷 Siap scan berikutnya…', 'info');
+    }, 3500);
+  })
+  .catch(function(err) {
+    setResult('❌ Gagal kirim ke server:\n' + err.message +
+              '\n\nPastikan GAS Web App sudah di-deploy\ndengan akses "Anyone".', 'err');
+    setDot('err');
+    cooldownUntil = Date.now() + 3000;
+    setTimeout(function() { isProcessing = false; }, 3000);
+  });
+}
+
+// ═══════════════════════════════════════════
+//  RESET
+// ═══════════════════════════════════════════
+function doReset() {
+  if (!lastScanned) { setResult('⚠️ Belum ada ID yang discan.', 'err'); return; }
+  if (!confirm('Reset ID: ' + lastScanned + '?\n\nIni menghapus status & waktu check-in/out.')) return;
+
+  var idToReset = lastScanned;
+  setResult('⏳ Mereset ID: ' + idToReset + '…', 'loading');
+
+  fetch(gasUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ action: 'reset', id: idToReset })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(res) {
+    if (res && res.status === 'success') {
+      setResult(res.message, 'ok');
+      lastScanned = null;
+    } else {
+      setResult((res && res.message) || 'Gagal reset.', 'err');
+    }
+  })
+  .catch(function(err) {
+    setResult('❌ Error reset: ' + err.message, 'err');
+  });
+}
+
+// ═══════════════════════════════════════════
+//  COPY
+// ═══════════════════════════════════════════
+function doCopy() {
+  var text = document.getElementById('result').textContent;
+  if (!text || text.startsWith('📷') || text.startsWith('⏳')) {
+    alert('⚠️ Belum ada hasil untuk disalin.'); return;
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text)
+      .then(function() { alert('✅ Berhasil disalin!'); })
+      .catch(function() { fallbackCopy(text); });
+  } else { fallbackCopy(text); }
+}
+function fallbackCopy(text) {
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;top:-999px;opacity:0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); alert('✅ Berhasil disalin!'); }
+  catch(e) { alert('❌ Gagal salin: ' + e); }
+  document.body.removeChild(ta);
+}
+
+// ═══════════════════════════════════════════
+//  EVENT LISTENERS
+// ═══════════════════════════════════════════
+document.getElementById('btn-restart').addEventListener('click', startCamera);
+document.getElementById('btn-copy').addEventListener('click', doCopy);
+document.getElementById('btn-reset').addEventListener('click', doReset);
+document.getElementById('btn-allow').addEventListener('click', function() {
+  showPerm(false); startCamera();
+});
+
+// ═══════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════
+updateUrlLabel();
+if (checkSetup()) {
+  startCamera();
+}
+</script>
+</body>
+</html>
