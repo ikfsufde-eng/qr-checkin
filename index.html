@@ -158,7 +158,7 @@ header {
   display: block;
 }
 
-/* Viewfinder overlay */
+/* Viewfinder overlay (Tanpa Animasi Beam) */
 #viewfinder {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
@@ -170,11 +170,10 @@ header {
   height: min(260px, 68vw);
   position: relative;
 }
-.vf::before { /* shade luar */
+.vf::before { 
   content: '';
   position: fixed; inset: 0;
   background: rgba(10,15,30,.55);
-  /* punch hole via clip-path tidak mungkin — pakai box-shadow trick */
   box-shadow: 0 0 0 100vmax rgba(10,15,30,.55);
   pointer-events: none;
 }
@@ -188,16 +187,6 @@ header {
 .corner.tr { top:0; right:0; border-width: 3px 3px 0 0; border-radius: 0 5px 0 0; }
 .corner.bl { bottom:0; left:0;  border-width: 0 0 3px 3px; border-radius: 0 0 0 5px; }
 .corner.br { bottom:0; right:0; border-width: 0 3px 3px 0; border-radius: 0 0 5px 0; }
-.scan-beam {
-  position: absolute;
-  left: 3px; right: 3px;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  filter: blur(1px);
-  top: 0;
-  animation: beam 2.2s cubic-bezier(.4,0,.6,1) infinite;
-}
-@keyframes beam { 0% { top: 0; opacity:.9; } 50%{ opacity:1; } 100% { top: 100%; opacity:.2; } }
 
 /* Overlay izin kamera */
 #perm-overlay {
@@ -230,6 +219,8 @@ header {
   white-space: pre-wrap;
   word-break: break-word;
   min-height: 54px;
+  max-height: 180px; /* Tambahan agar bisa discroll jika pesannya sangat panjang */
+  overflow-y: auto;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--muted);
@@ -284,7 +275,6 @@ header        { animation-delay: .05s; }
 <body>
 <div id="app">
 
-  <!-- SETUP SCREEN: masukkan GAS URL -->
   <div id="setup-screen">
     <div class="setup-icon">⚙️</div>
     <h2>Konfigurasi Web App</h2>
@@ -302,7 +292,6 @@ header        { animation-delay: .05s; }
     </div>
   </div>
 
-  <!-- HEADER -->
   <header>
     <div class="logo">📡</div>
     <div class="header-text">
@@ -312,23 +301,19 @@ header        { animation-delay: .05s; }
     <div class="pulse-dot" id="dot"></div>
   </header>
 
-  <!-- KAMERA -->
   <div id="cam-wrap">
     <video id="cam-video" autoplay playsinline muted></video>
     <canvas id="qr-canvas"></canvas>
 
-    <!-- Viewfinder -->
     <div id="viewfinder">
       <div class="vf">
         <div class="corner tl"></div>
         <div class="corner tr"></div>
         <div class="corner bl"></div>
         <div class="corner br"></div>
-        <div class="scan-beam"></div>
       </div>
     </div>
 
-    <!-- Overlay izin ditolak -->
     <div id="perm-overlay">
       <div class="perm-icon">🚫</div>
       <h2>Akses Kamera Ditolak</h2>
@@ -344,12 +329,10 @@ header        { animation-delay: .05s; }
     </div>
   </div>
 
-  <!-- HASIL -->
   <div id="result-wrap">
     <div id="result" class="info">📷 Memulai kamera…</div>
   </div>
 
-  <!-- TOMBOL -->
   <div id="btns">
     <button class="btn" id="btn-restart">🔄 Restart</button>
     <button class="btn" id="btn-copy">📋 Salin</button>
@@ -359,7 +342,6 @@ header        { animation-delay: .05s; }
 
 </div>
 
-<!-- jsQR untuk decode QR tanpa iframe -->
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 // ═══════════════════════════════════════════
@@ -444,7 +426,7 @@ document.getElementById('btn-config').addEventListener('click', function() {
 });
 
 // ═══════════════════════════════════════════
-//  KAMERA — pakai getUserMedia langsung (bukan library)
+//  KAMERA
 // ═══════════════════════════════════════════
 function startCamera() {
   stopCamera();
@@ -486,7 +468,6 @@ function startCamera() {
     } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
       msg = '⚠️ Kamera sedang dipakai aplikasi lain. Tutup aplikasi lain lalu restart.';
     } else if (err.name === 'OverconstrainedError') {
-      // Coba tanpa constraint facingMode
       fallbackCamera();
       return;
     } else {
@@ -497,7 +478,6 @@ function startCamera() {
   });
 }
 
-// Fallback: coba tanpa facing mode (beberapa HP butuh ini)
 function fallbackCamera() {
   navigator.mediaDevices.getUserMedia({ video: true, audio: false })
   .then(function(s) {
@@ -526,7 +506,7 @@ function stopCamera() {
 }
 
 // ═══════════════════════════════════════════
-//  QR SCAN LOOP — pakai jsQR, tanpa library berat
+//  QR SCAN LOOP
 // ═══════════════════════════════════════════
 function scanLoop() {
   rafId = requestAnimationFrame(function() {
@@ -571,7 +551,7 @@ function handleScan(decodedText) {
 
   fetch(gasUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain' }, // GAS tidak support application/json di CORS
+    headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify({ action: 'checkin', id: id })
   })
   .then(function(r) {
@@ -586,12 +566,14 @@ function handleScan(decodedText) {
       setResult((res && res.message) || 'Terjadi kesalahan.', 'err');
       setDot('err');
     }
-    cooldownUntil = Date.now() + 3500;
+    
+    // Cooldown dipercepat agar bisa baca QR baru, TAPI pesan tetap tampil
+    cooldownUntil = Date.now() + 2500;
     setTimeout(function() {
-      isProcessing = false;
+      isProcessing = false; // Buka kunci agar kamera bisa baca lagi
       setDot('on');
-      setResult('📷 Siap scan berikutnya…', 'info');
-    }, 3500);
+      // Pesan TIDAK DIHAPUS agar bisa disalin
+    }, 2500);
   })
   .catch(function(err) {
     setResult('❌ Gagal kirim ke server:\n' + err.message +
@@ -637,11 +619,11 @@ function doReset() {
 function doCopy() {
   var text = document.getElementById('result').textContent;
   if (!text || text.startsWith('📷') || text.startsWith('⏳')) {
-    alert('⚠️ Belum ada hasil untuk disalin.'); return;
+    alert('⚠️ Belum ada hasil valid untuk disalin.'); return;
   }
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text)
-      .then(function() { alert('✅ Berhasil disalin!'); })
+      .then(function() { alert('✅ Hasil berhasil disalin!'); })
       .catch(function() { fallbackCopy(text); });
   } else { fallbackCopy(text); }
 }
@@ -651,7 +633,7 @@ function fallbackCopy(text) {
   ta.style.cssText = 'position:fixed;top:-999px;opacity:0';
   document.body.appendChild(ta);
   ta.select();
-  try { document.execCommand('copy'); alert('✅ Berhasil disalin!'); }
+  try { document.execCommand('copy'); alert('✅ Hasil berhasil disalin!'); }
   catch(e) { alert('❌ Gagal salin: ' + e); }
   document.body.removeChild(ta);
 }
