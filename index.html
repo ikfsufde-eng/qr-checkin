@@ -158,7 +158,7 @@ header {
   display: block;
 }
 
-/* Viewfinder overlay (Tanpa Animasi Beam) */
+/* Viewfinder overlay */
 #viewfinder {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
@@ -219,7 +219,7 @@ header {
   white-space: pre-wrap;
   word-break: break-word;
   min-height: 54px;
-  max-height: 180px; /* Tambahan agar bisa discroll jika pesannya sangat panjang */
+  max-height: 180px; 
   overflow-y: auto;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -256,6 +256,7 @@ header {
 }
 .btn:active { transform: scale(0.96); opacity: .8; }
 #btn-restart { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+#btn-file    { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
 #btn-copy    { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
 #btn-config  { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
 #btn-reset   { background: #2d0a14; color: #fda4af; border: 1px solid #7f1d1d; grid-column: span 2; }
@@ -334,7 +335,9 @@ header        { animation-delay: .05s; }
   </div>
 
   <div id="btns">
+    <input type="file" id="file-input" accept="image/*" style="display: none;">
     <button class="btn" id="btn-restart">🔄 Restart</button>
+    <button class="btn" id="btn-file">📂 Pilih Gambar</button>
     <button class="btn" id="btn-copy">📋 Salin</button>
     <button class="btn" id="btn-config">⚙️ Config</button>
     <button class="btn" id="btn-reset">⏹️ Reset ID Terakhir</button>
@@ -531,7 +534,48 @@ function scanLoop() {
 }
 
 // ═══════════════════════════════════════════
-//  HANDLE SCAN
+//  SCAN DARI GAMBAR (FILE MANAGER)
+// ═══════════════════════════════════════════
+document.getElementById('btn-file').addEventListener('click', function() {
+  document.getElementById('file-input').click();
+});
+
+document.getElementById('file-input').addEventListener('change', function(e) {
+  if (e.target.files && e.target.files.length > 0) {
+    let file = e.target.files[0];
+    let reader = new FileReader();
+    
+    setResult('⏳ Membaca gambar...', 'loading');
+    
+    reader.onload = function(event) {
+      let img = new Image();
+      img.onload = function() {
+        // Gunakan temporary canvas untuk membaca imageData dari file gambar
+        let tempCanvas = document.createElement('canvas');
+        let tempCtx = tempCanvas.getContext('2d');
+        tempCanvas.width = img.width;
+        tempCanvas.height = img.height;
+        tempCtx.drawImage(img, 0, 0, img.width, img.height);
+        
+        let imageData = tempCtx.getImageData(0, 0, img.width, img.height);
+        let code = jsQR(imageData.data, img.width, img.height, { inversionAttempts: "dontInvert" });
+        
+        if (code && code.data) {
+          handleScan(code.data);
+        } else {
+          setResult('❌ QR Code tidak ditemukan pada gambar tersebut.', 'err');
+        }
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+  // Reset value input agar bisa pilih gambar yang sama lagi nanti
+  e.target.value = '';
+});
+
+// ═══════════════════════════════════════════
+//  HANDLE SCAN (Kamera & Gambar)
 // ═══════════════════════════════════════════
 function handleScan(decodedText) {
   var id = String(decodedText).trim();
