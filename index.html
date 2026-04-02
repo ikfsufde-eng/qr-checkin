@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0a0f1e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>QR Check-in Scanner Super Cepat</title>
+<title>QR Check-in out berkas by Dimas Satrio Wibowo S.Kel, MM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
 
@@ -280,7 +280,7 @@ header        { animation-delay: .05s; }
     <div class="setup-icon">⚙️</div>
     <h2>Konfigurasi Web App</h2>
     <p>Masukkan URL Google Apps Script Web App kamu agar scanner bisa terhubung ke Google Sheet.</p>
-    <input id="gas-url-input" type="url" placeholder="script.google.com/macros/s/...../exec" autocomplete="off" spellcheck="false">
+    <input id="gas-url-input" type="url" placeholder="https://script.google.com/macros/s/..." autocomplete="off" spellcheck="false">
     <button id="btn-save-url">Simpan & Mulai Scanner</button>
     <div class="note-box">
       <b>Cara dapat URL ini:</b><br>
@@ -360,7 +360,7 @@ try {
 
 var video        = document.getElementById('cam-video');
 var canvas       = document.getElementById('qr-canvas');
-var ctx          = canvas.getContext('2d');
+var ctx          = canvas.getContext('2d', { willReadFrequently: true });
 var stream       = null;
 var rafId        = null;
 var isProcessing = false;
@@ -385,7 +385,7 @@ function showSetup(show) {
 
 function updateUrlLabel() {
   var label = document.getElementById('url-label');
-  if (gasUrl) {
+  if (gasUrl && gasUrl.length > 8) {
     var short = gasUrl.replace('https://', '').substring(0, 20) + '…';
     label.textContent = short;
   } else {
@@ -396,34 +396,41 @@ function updateUrlLabel() {
 // ═══════════════════════════════════════════
 //  TOMBOL SIMPAN URL (DIPERKUAT ANTI-GAGAL)
 // ═══════════════════════════════════════════
-document.getElementById('btn-save-url').onclick = function() {
+document.getElementById('btn-save-url').addEventListener('click', function(e) {
+  e.preventDefault(); // Cegah reload tak terduga
+
   var val = document.getElementById('gas-url-input').value.trim();
   
-  // Validasi diperlonggar agar tidak mudah error
-  if (val.length < 20 || !val.includes('script.google.com')) {
-    alert('❌ URL tidak valid. Pastikan Anda meng-copy link dari Google Apps Script yang benar.');
+  if (val === '') {
+    alert('❌ URL tidak boleh kosong!');
+    return;
+  }
+
+  // Hanya pastikan dia diawali dengan http (menghindari error jika pakai link pendek spt bit.ly)
+  if (!val.startsWith('http')) {
+    alert('❌ URL harus diawali dengan http:// atau https://');
     return;
   }
 
   gasUrl = val;
 
-  // Coba simpan ke localStorage
+  // Simpan ke HP jika diizinkan
   try {
     localStorage.setItem(STORAGE_KEY, gasUrl);
-  } catch(e) {
-    console.warn("Gagal menyimpan permanen karena privasi browser.");
+  } catch(err) {
+    console.warn("Gagal menyimpan permanen ke memori HP.");
   }
 
-  // Paksa tutup layar setup dan jalankan kamera
-  showSetup(false);
+  // Paksa tutup layar setup dan buka kamera
+  document.getElementById('setup-screen').style.display = 'none';
   updateUrlLabel();
   startCamera();
-};
+});
 
-document.getElementById('btn-config').onclick = function() {
+document.getElementById('btn-config').addEventListener('click', function() {
   document.getElementById('gas-url-input').value = gasUrl || '';
-  showSetup(true);
-};
+  document.getElementById('setup-screen').style.display = 'flex';
+});
 
 // ═══════════════════════════════════════════
 //  KAMERA (OPTIMASI KECEPATAN & AUTO-FOCUS)
@@ -460,7 +467,6 @@ function startCamera() {
     };
   })
   .catch(function(err) {
-    var msg = '';
     if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
       document.getElementById('perm-overlay').style.display = 'flex';
     } else {
@@ -519,9 +525,9 @@ function scanLoop() {
 // ═══════════════════════════════════════════
 //  SCAN DARI GAMBAR (FILE MANAGER)
 // ═══════════════════════════════════════════
-document.getElementById('btn-file').onclick = function() {
+document.getElementById('btn-file').addEventListener('click', function() {
   document.getElementById('file-input').click();
-};
+});
 
 document.getElementById('file-input').addEventListener('change', function(e) {
   if (e.target.files && e.target.files.length > 0) {
@@ -616,7 +622,7 @@ function handleScan(decodedText) {
 // ═══════════════════════════════════════════
 //  RESET & COPY EVENT
 // ═══════════════════════════════════════════
-document.getElementById('btn-reset').onclick = function() {
+document.getElementById('btn-reset').addEventListener('click', function() {
   if (!lastScanned) { setResult('⚠️ Belum ada ID yang discan.', 'err'); return; }
   if (!confirm('Reset ID: ' + lastScanned + '?\n\nIni menghapus status & waktu check-in/out.')) return;
 
@@ -638,29 +644,18 @@ document.getElementById('btn-reset').onclick = function() {
     }
   })
   .catch(err => setResult('❌ Error reset: ' + err.message, 'err'));
-};
+});
 
-document.getElementById('btn-copy').onclick = function() {
+document.getElementById('btn-copy').addEventListener('click', function() {
   var text = document.getElementById('result').textContent;
   if (!text || text.startsWith('📷') || text.startsWith('⏳')) {
     alert('⚠️ Belum ada hasil valid untuk disalin.'); return;
   }
   
-  // Method copy text modern
   var ta = document.createElement('textarea');
   ta.value = text;
   ta.style.cssText = 'position:fixed;top:-999px;opacity:0';
   document.body.appendChild(ta);
   ta.select();
   try { document.execCommand('copy'); alert('✅ Hasil berhasil disalin!'); }
-  catch(e) { alert('❌ Gagal salin: ' + e); }
-  document.body.removeChild(ta);
-};
-
-document.getElementById('btn-restart').onclick = startCamera;
-document.getElementById('btn-allow').onclick = function() {
-  document.getElementById('perm-overlay').style.display = 'none';
-  startCamera();
-};
-
-// ══════════════════════════════════
+  catch(e) { alert('❌ 
