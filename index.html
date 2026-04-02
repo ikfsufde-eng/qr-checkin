@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0a0f1e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>QR Check-in out berkas</title>
+<title>QR Check-in out berkas by Dimas Satrio Wibowo S.Kel, MM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
 
@@ -262,34 +262,34 @@ header {
 #btn-reset   { background: #2d0a14; color: #fda4af; border: 1px solid #7f1d1d; grid-column: span 2; }
 #btn-allow   { background: linear-gradient(135deg, var(--accent2), var(--accent)); color:#000; font-weight:700; width:100%; padding:15px; border-radius:12px; border:none; margin-top:4px; font-size:15px; font-family:var(--font-head); cursor:pointer; }
 
-/* ── CANVAS ── */
+/* ── CANVAS (tersembunyi, untuk decode QR) ── */
 #qr-canvas { display: none; }
+
+/* ── ANIMASI MASUK ── */
+@keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
+header, #result-wrap, #btns { animation: fadeUp .4s ease both; }
+header        { animation-delay: .05s; }
+#result-wrap  { animation-delay: .12s; }
+#btns         { animation-delay: .18s; }
 </style>
 </head>
 <body>
-
-<script>
-  window.onerror = function(msg, url, line) {
-    alert("Maaf ada Error Sistem:\n" + msg + "\nBaris: " + line);
-    return true; 
-  };
-</script>
-
 <div id="app">
 
   <div id="setup-screen">
     <div class="setup-icon">⚙️</div>
     <h2>Konfigurasi Web App</h2>
     <p>Masukkan URL Google Apps Script Web App kamu agar scanner bisa terhubung ke Google Sheet.</p>
-    <input id="gas-url-input" type="url" placeholder="https://script.google.com/macros/s/..." autocomplete="off" spellcheck="false">
-    <button id="btn-save-url" onclick="prosesSimpanURL()">Simpan & Mulai Scanner</button>
+    <input id="gas-url-input" type="url" placeholder="https://script.google.com/macros/s/...../exec" autocomplete="off" spellcheck="false">
+    <button id="btn-save-url">Simpan & Mulai Scanner</button>
     <div class="note-box">
       <b>Cara dapat URL ini:</b><br>
       1. Buka <b>Apps Script</b> → <b>Deploy</b> → <b>New deployment</b><br>
       2. Type: <b>Web App</b><br>
       3. Execute as: <b>Me</b><br>
       4. Who has access: <b>Anyone</b><br>
-      5. Copy URL yang muncul, paste di atas<br>
+      5. Copy URL yang muncul, paste di atas<br><br>
+      <b>Penting:</b> Setiap update <code>Code.gs</code>, buat deployment baru agar URL tetap valid.
     </div>
   </div>
 
@@ -323,9 +323,10 @@ header {
         <b>Di Chrome Android:</b><br>
         Ketuk 🔒 di address bar → <b>Izin Situs</b> → <b>Kamera</b> → <b>Izinkan</b> → Reload<br><br>
         <b>Di Chrome Desktop:</b><br>
-        Klik 🔒/📷 di address bar → <b>Camera</b> → <b>Allow</b> → Reload
+        Klik 🔒/📷 di address bar → <b>Camera</b> → <b>Allow</b> → Reload<br><br>
+        <b>Pastikan</b> halaman dibuka via HTTPS (GitHub Pages sudah HTTPS otomatis).
       </div>
-      <button class="btn" id="btn-allow" onclick="cobaLagiKamera()">🎥 Coba Lagi</button>
+      <button class="btn" id="btn-allow">🎥 Coba Lagi</button>
     </div>
   </div>
 
@@ -335,11 +336,11 @@ header {
 
   <div id="btns">
     <input type="file" id="file-input" accept="image/*" style="display: none;">
-    <button class="btn" id="btn-restart" onclick="startCamera()">🔄 Restart</button>
-    <button class="btn" id="btn-file" onclick="bukaFile()">📂 Pilih Gambar</button>
-    <button class="btn" id="btn-copy" onclick="doCopy()">📋 Salin</button>
-    <button class="btn" id="btn-config" onclick="bukaConfig()">⚙️ Config</button>
-    <button class="btn" id="btn-reset" onclick="doReset()">⏹️ Reset ID Terakhir</button>
+    <button class="btn" id="btn-restart">🔄 Restart</button>
+    <button class="btn" id="btn-file">📂 Pilih Gambar</button>
+    <button class="btn" id="btn-copy">📋 Salin</button>
+    <button class="btn" id="btn-config">⚙️ Config</button>
+    <button class="btn" id="btn-reset">⏹️ Reset ID Terakhir</button>
   </div>
 
 </div>
@@ -347,27 +348,26 @@ header {
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 // ═══════════════════════════════════════════
-//  CONFIG & INIT
+//  CONFIG
 // ═══════════════════════════════════════════
 var STORAGE_KEY = 'qr_checkin_gas_url';
-var gasUrl = '';
+var gasUrl      = localStorage.getItem(STORAGE_KEY) || '';
 
-try {
-  gasUrl = localStorage.getItem(STORAGE_KEY) || '';
-} catch(e) {
-  console.warn("LocalStorage diblokir oleh browser.");
-}
-
+// ═══════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════
 var video        = document.getElementById('cam-video');
 var canvas       = document.getElementById('qr-canvas');
-var ctx          = canvas.getContext('2d'); // Disederhanakan agar cocok di semua HP
+var ctx          = canvas.getContext('2d');
 var stream       = null;
 var rafId        = null;
 var isProcessing = false;
 var lastScanned  = null;
 var cooldownUntil= 0;
-var lastScanTime = 0; 
 
+// ═══════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════
 function setResult(text, cls) {
   var el = document.getElementById('result');
   el.className = cls || 'info';
@@ -379,14 +379,18 @@ function setDot(state) {
   d.className = 'pulse-dot' + (state ? ' ' + state : '');
 }
 
+function showPerm(show) {
+  document.getElementById('perm-overlay').style.display = show ? 'flex' : 'none';
+}
+
 function showSetup(show) {
   document.getElementById('setup-screen').style.display = show ? 'flex' : 'none';
 }
 
 function updateUrlLabel() {
   var label = document.getElementById('url-label');
-  if (gasUrl && gasUrl.length > 8) {
-    var short = gasUrl.replace('https://', '').substring(0, 20) + '…';
+  if (gasUrl) {
+    var short = gasUrl.replace('https://script.google.com/macros/s/', '').substring(0, 18) + '…';
     label.textContent = short;
   } else {
     label.textContent = 'Belum dikonfigurasi';
@@ -394,51 +398,47 @@ function updateUrlLabel() {
 }
 
 // ═══════════════════════════════════════════
-//  TOMBOL SIMPAN URL (DIPERKUAT ANTI-GAGAL)
+//  SETUP SCREEN
 // ═══════════════════════════════════════════
-function prosesSimpanURL() {
-  try {
-    var val = document.getElementById('gas-url-input').value.trim();
-    
-    if (val === '') {
-      alert('❌ URL tidak boleh kosong!');
-      return;
-    }
-
-    if (!val.startsWith('http')) {
-      alert('❌ URL harus diawali dengan http:// atau https://');
-      return;
-    }
-
-    gasUrl = val;
-
-    try { localStorage.setItem(STORAGE_KEY, gasUrl); } catch(err) {}
-
-    // Paksa tutup layar setup dan buka kamera
-    showSetup(false);
-    updateUrlLabel();
-    startCamera();
-  } catch (error) {
-    alert("Error saat menyimpan: " + error.message);
+function checkSetup() {
+  if (!gasUrl) {
+    showSetup(true);
+    return false;
   }
+  showSetup(false);
+  updateUrlLabel();
+  return true;
 }
 
-function bukaConfig() {
+document.getElementById('btn-save-url').addEventListener('click', function() {
+  var val = document.getElementById('gas-url-input').value.trim();
+  if (!val.startsWith('https://script.google.com/macros/s/')) {
+    alert('❌ URL tidak valid. Harus dimulai dengan:\nhttps://script.google.com/macros/s/');
+    return;
+  }
+  gasUrl = val;
+  localStorage.setItem(STORAGE_KEY, gasUrl);
+  showSetup(false);
+  updateUrlLabel();
+  startCamera();
+});
+
+document.getElementById('btn-config').addEventListener('click', function() {
   document.getElementById('gas-url-input').value = gasUrl || '';
   showSetup(true);
-}
+});
 
 // ═══════════════════════════════════════════
 //  KAMERA
 // ═══════════════════════════════════════════
 function startCamera() {
   stopCamera();
-  document.getElementById('perm-overlay').style.display = 'none';
+  showPerm(false);
   setDot('');
   setResult('📷 Meminta izin kamera…', 'info');
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    setResult('❌ Browser tidak mendukung akses kamera.', 'err');
+    setResult('❌ Browser tidak mendukung kamera.\nGunakan Chrome/Safari versi terbaru.', 'err');
     setDot('err');
     return;
   }
@@ -447,8 +447,7 @@ function startCamera() {
     video: {
       facingMode: { ideal: 'environment' },
       width:  { ideal: 1280 },
-      height: { ideal: 720 },
-      advanced: [{ focusMode: "continuous" }] 
+      height: { ideal: 720 }
     },
     audio: false
   })
@@ -463,12 +462,40 @@ function startCamera() {
     };
   })
   .catch(function(err) {
+    var msg = '';
     if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-      document.getElementById('perm-overlay').style.display = 'flex';
+      showPerm(true);
+      msg = '🚫 Kamera diblokir. Lihat panduan di atas.';
+    } else if (err.name === 'NotFoundError') {
+      msg = '❌ Tidak ada kamera ditemukan di perangkat ini.';
+    } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+      msg = '⚠️ Kamera sedang dipakai aplikasi lain. Tutup aplikasi lain lalu restart.';
+    } else if (err.name === 'OverconstrainedError') {
+      fallbackCamera();
+      return;
     } else {
-      setResult('⚠️ Kamera error: ' + err.message, 'err');
-      setDot('err');
+      msg = '⚠️ Gagal akses kamera: ' + err.name + ' — ' + err.message;
     }
+    setResult(msg, 'err');
+    setDot('err');
+  });
+}
+
+function fallbackCamera() {
+  navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+  .then(function(s) {
+    stream = s;
+    video.srcObject = s;
+    video.onloadedmetadata = function() {
+      video.play();
+      setDot('on');
+      setResult('📷 Kamera siap (mode fallback). Arahkan ke QR Code.', 'info');
+      scanLoop();
+    };
+  })
+  .catch(function(err) {
+    setResult('❌ Tidak bisa akses kamera: ' + err.message, 'err');
+    setDot('err');
   });
 }
 
@@ -481,40 +508,24 @@ function stopCamera() {
   video.srcObject = null;
 }
 
-function cobaLagiKamera() {
-  document.getElementById('perm-overlay').style.display = 'none';
-  startCamera();
-}
-
 // ═══════════════════════════════════════════
-//  QR SCAN LOOP (SUPER CEPAT)
+//  QR SCAN LOOP
 // ═══════════════════════════════════════════
 function scanLoop() {
   rafId = requestAnimationFrame(function() {
     if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      var w = video.videoWidth;
+      var h = video.videoHeight;
+      canvas.width  = w;
+      canvas.height = h;
+      ctx.drawImage(video, 0, 0, w, h);
+
       var now = Date.now();
-      
-      if (!isProcessing && now >= cooldownUntil && (now - lastScanTime > 60)) {
-        lastScanTime = now;
-        
-        var w = video.videoWidth;
-        var h = video.videoHeight;
-        var scale = w > 400 ? 400 / w : 1; 
-        var cw = Math.floor(w * scale);
-        var ch = Math.floor(h * scale);
-
-        canvas.width  = cw;
-        canvas.height = ch;
-        ctx.drawImage(video, 0, 0, cw, ch);
-
-        var imageData = ctx.getImageData(0, 0, cw, ch);
-        
-        // Pengecekan aman, jsQR wajib terpanggil dengan sukses
-        if (typeof jsQR !== "undefined") {
-          var code = jsQR(imageData.data, cw, ch, { inversionAttempts: "attemptBoth" });
-          if (code && code.data) {
-            handleScan(code.data);
-          }
+      if (!isProcessing && now >= cooldownUntil) {
+        var imageData = ctx.getImageData(0, 0, w, h);
+        var code = jsQR(imageData.data, w, h, { inversionAttempts: 'dontInvert' });
+        if (code && code.data) {
+          handleScan(code.data);
         }
       }
     }
@@ -523,54 +534,48 @@ function scanLoop() {
 }
 
 // ═══════════════════════════════════════════
-//  SCAN DARI GAMBAR
+//  SCAN DARI GAMBAR (FILE MANAGER)
 // ═══════════════════════════════════════════
-function bukaFile() {
+document.getElementById('btn-file').addEventListener('click', function() {
   document.getElementById('file-input').click();
-}
+});
 
 document.getElementById('file-input').addEventListener('change', function(e) {
   if (e.target.files && e.target.files.length > 0) {
-    var file = e.target.files[0];
-    var reader = new FileReader();
+    let file = e.target.files[0];
+    let reader = new FileReader();
     
     setResult('⏳ Membaca gambar...', 'loading');
     
     reader.onload = function(event) {
-      var img = new Image();
+      let img = new Image();
       img.onload = function() {
-        var tempCanvas = document.createElement('canvas');
-        var tempCtx = tempCanvas.getContext('2d');
+        // Gunakan temporary canvas untuk membaca imageData dari file gambar
+        let tempCanvas = document.createElement('canvas');
+        let tempCtx = tempCanvas.getContext('2d');
+        tempCanvas.width = img.width;
+        tempCanvas.height = img.height;
+        tempCtx.drawImage(img, 0, 0, img.width, img.height);
         
-        var w = img.width;
-        var h = img.height;
-        var scale = w > 800 ? 800 / w : 1;
-        var cw = Math.floor(w * scale);
-        var ch = Math.floor(h * scale);
+        let imageData = tempCtx.getImageData(0, 0, img.width, img.height);
+        let code = jsQR(imageData.data, img.width, img.height, { inversionAttempts: "dontInvert" });
         
-        tempCanvas.width = cw;
-        tempCanvas.height = ch;
-        tempCtx.drawImage(img, 0, 0, cw, ch);
-        
-        var imageData = tempCtx.getImageData(0, 0, cw, ch);
-        if (typeof jsQR !== "undefined") {
-          var code = jsQR(imageData.data, cw, ch, { inversionAttempts: "attemptBoth" });
-          if (code && code.data) {
-            handleScan(code.data);
-          } else {
-            setResult('❌ QR Code tidak ditemukan pada gambar.', 'err');
-          }
+        if (code && code.data) {
+          handleScan(code.data);
+        } else {
+          setResult('❌ QR Code tidak ditemukan pada gambar tersebut.', 'err');
         }
       };
       img.src = event.target.result;
     };
     reader.readAsDataURL(file);
   }
+  // Reset value input agar bisa pilih gambar yang sama lagi nanti
   e.target.value = '';
 });
 
 // ═══════════════════════════════════════════
-//  HANDLE SCAN (Kirim ke Server)
+//  HANDLE SCAN (Kamera & Gambar)
 // ═══════════════════════════════════════════
 function handleScan(decodedText) {
   var id = String(decodedText).trim();
@@ -606,14 +611,17 @@ function handleScan(decodedText) {
       setDot('err');
     }
     
+    // Cooldown dipercepat agar bisa baca QR baru, TAPI pesan tetap tampil
     cooldownUntil = Date.now() + 2500;
     setTimeout(function() {
-      isProcessing = false; 
+      isProcessing = false; // Buka kunci agar kamera bisa baca lagi
       setDot('on');
+      // Pesan TIDAK DIHAPUS agar bisa disalin
     }, 2500);
   })
   .catch(function(err) {
-    setResult('❌ Gagal kirim ke server:\n' + err.message, 'err');
+    setResult('❌ Gagal kirim ke server:\n' + err.message +
+              '\n\nPastikan GAS Web App sudah di-deploy\ndengan akses "Anyone".', 'err');
     setDot('err');
     cooldownUntil = Date.now() + 3000;
     setTimeout(function() { isProcessing = false; }, 3000);
@@ -621,7 +629,7 @@ function handleScan(decodedText) {
 }
 
 // ═══════════════════════════════════════════
-//  RESET & COPY EVENT
+//  RESET
 // ═══════════════════════════════════════════
 function doReset() {
   if (!lastScanned) { setResult('⚠️ Belum ada ID yang discan.', 'err'); return; }
@@ -644,38 +652,5 @@ function doReset() {
       setResult((res && res.message) || 'Gagal reset.', 'err');
     }
   })
-  .catch(function(err) { setResult('❌ Error reset: ' + err.message, 'err'); });
-}
-
-function doCopy() {
-  var text = document.getElementById('result').textContent;
-  if (!text || text.startsWith('📷') || text.startsWith('⏳')) {
-    alert('⚠️ Belum ada hasil valid untuk disalin.'); return;
-  }
-  
-  var ta = document.createElement('textarea');
-  ta.value = text;
-  ta.style.cssText = 'position:fixed;top:-999px;opacity:0';
-  document.body.appendChild(ta);
-  ta.select();
-  try { document.execCommand('copy'); alert('✅ Hasil berhasil disalin!'); }
-  catch(e) { alert('❌ Gagal salin: ' + e); }
-  document.body.removeChild(ta);
-}
-
-// ═══════════════════════════════════════════
-//  INIT
-// ═══════════════════════════════════════════
-window.onload = function() {
-  updateUrlLabel();
-  if (!gasUrl) {
-    showSetup(true);
-  } else {
-    showSetup(false);
-    startCamera();
-  }
-};
-</script>
-</body>
-</html>
-
+  .catch(function(err) {
+    
