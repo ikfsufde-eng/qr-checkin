@@ -336,7 +336,7 @@ header        { animation-delay: .05s; }
     <div class="setup-icon">⚙️</div>
     <h2>Konfigurasi Web App</h2>
     <p>Masukkan URL Google Apps Script Web App kamu agar scanner bisa terhubung ke Google Sheet.</p>
-    <input id="gas-url-input" type="url" value="https://script.google.com/macros/s/AKfycbwI91dGElMcgsLGe2YpTJX1kLJN95hKemtMw3LQ4nKE_gRZgaecAisbgdsbUar4Z0J0/exec" placeholder="https://script.google.com/macros/s/...../exec" autocomplete="off" spellcheck="false">
+    <input id="gas-url-input" type="url" placeholder="https://script.google.com/macros/s/...../exec" autocomplete="off" spellcheck="false">
     <button id="btn-save-url">Simpan &amp; Mulai Scanner</button>
     <div class="note-box">
       <b>Cara dapat URL ini:</b><br>
@@ -423,7 +423,7 @@ var gasUrl      = localStorage.getItem(STORAGE_KEY) || '';
 // ═══════════════════════════════════════════
 var video        = document.getElementById('cam-video');
 var canvas       = document.getElementById('qr-canvas');
-var ctx          = canvas.getContext('2d');
+var ctx          = canvas.getContext('2d', { willReadFrequently: true });
 var stream       = null;
 var rafId        = null;
 var isProcessing = false;
@@ -591,14 +591,25 @@ function stopCamera() {
 }
 
 // ═══════════════════════════════════════════
-//  QR SCAN LOOP — OPTIMIZED
-//  • Scan setiap 80ms (bukan tiap frame 60fps yg boros CPU)
-//  • Canvas diperkecil ke max 480px agar jsQR lebih cepat
-//  • inversionAttempts: 'attemptBoth' supaya QR gelap/terang terbaca
+//  QR SCAN LOOP — MAXIMUM SPEED
 // ═══════════════════════════════════════════
 var lastScanTime  = 0;
-var SCAN_INTERVAL = 80;   // ms antar percobaan scan
-var missStreak    = 0;    // hitung berapa kali gagal berturut-turut
+var SCAN_INTERVAL = 50;   // ms — lebih agresif dari 80ms
+var missStreak    = 0;
+
+function enhanceImageData(imageData) {
+  // Tingkatkan kontras pixel sebelum dikirim ke jsQR
+  // QR code hitam-putih = kontras tinggi → lebih mudah dibaca
+  var d = imageData.data;
+  for (var i = 0; i < d.length; i += 4) {
+    // Grayscale dulu
+    var gray = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
+    // Stretch kontras: tarik ke hitam atau putih
+    var v = gray < 128 ? Math.max(0, gray - 30) : Math.min(255, gray + 30);
+    d[i] = d[i+1] = d[i+2] = v;
+  }
+  return imageData;
+}
 
 function scanLoop() {
   rafId = requestAnimationFrame(function() {
@@ -610,11 +621,8 @@ function scanLoop() {
         var vw = video.videoWidth;
         var vh = video.videoHeight;
 
-        // Strategi adaptif:
-        // Gagal <10x → pakai 480px (cepat)
-        // Gagal 10–20x → pakai 640px (lebih detail)
-        // Gagal >20x → pakai full resolusi (paling akurat, tapi lebih lambat)
-        var maxSide = missStreak < 10 ? 480 : missStreak < 20 ? 640 : 960;
+        // Resolusi adaptif: mulai 640px, naik jika terus gagal
+        var maxSide = missStreak < 15 ? 640 : missStreak < 30 ? 800 : 1024;
         var scale = Math.min(1, maxSide / Math.max(vw, vh));
         var w = Math.round(vw * scale);
         var h = Math.round(vh * scale);
@@ -626,7 +634,16 @@ function scanLoop() {
         ctx.drawImage(video, 0, 0, w, h);
 
         var imageData = ctx.getImageData(0, 0, w, h);
+
+        // Coba tanpa enhance dulu (lebih cepat)
         var code = jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' });
+
+        // Kalau gagal, coba dengan kontras ditingkatkan
+        if (!code) {
+          var enhanced = enhanceImageData(ctx.getImageData(0, 0, w, h));
+          code = jsQR(enhanced.data, w, h, { inversionAttempts: 'attemptBoth' });
+        }
+
         if (code && code.data) {
           missStreak = 0;
           handleScan(code.data);
@@ -663,7 +680,7 @@ document.getElementById('file-input').addEventListener('change', function(e) {
         tempCtx.drawImage(img, 0, 0, img.width, img.height);
 
         var imageData = tempCtx.getImageData(0, 0, img.width, img.height);
-        var code = jsQR(imageData.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+        var code = jsQR(imageData.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
 
         if (code && code.data) {
           handleScan(code.data);
