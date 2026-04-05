@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0a0f1e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>QR Check5-in out berkas by Dimas Satrio Wibowo S.Kel, MM</title>
+<title>QR Check-in out berkas by Dimas Satrio Wibowo S.Kel, MM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
 
@@ -407,7 +407,6 @@ header        { animation-delay: .05s; }
 
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 // ═══════════════════════════════════════════
 //  CONFIG
@@ -426,6 +425,28 @@ var rafId        = null;
 var isProcessing = false;
 var lastScanned  = null;
 var cooldownUntil= 0;
+var barcodeDetector = null; // Native BarcodeDetector API
+var jsQRLib      = null;    // Fallback jsQR
+
+// ═══════════════════════════════════════════
+//  INIT DETECTOR — pakai native API dulu,
+//  fallback ke jsQR kalau tidak support
+// ═══════════════════════════════════════════
+function initDetector() {
+  if ('BarcodeDetector' in window) {
+    try {
+      barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
+      console.log('✅ Pakai BarcodeDetector (native GPU-accelerated)');
+      return;
+    } catch(e) {}
+  }
+  // Load jsQR sebagai fallback
+  var s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+  s.onload = function() { jsQRLib = jsQR; console.log('✅ Pakai jsQR (fallback)'); };
+  document.head.appendChild(s);
+}
+initDetector();
 
 // ═══════════════════════════════════════════
 //  UI HELPERS
@@ -588,78 +609,78 @@ function stopCamera() {
 }
 
 // ═══════════════════════════════════════════
-//  QR SCAN LOOP — CROP + FAST
-//  Hanya scan area dalam kotak viewfinder,
-//  bukan seluruh frame — jauh lebih cepat
+//  QR SCAN LOOP
+//  Mode 1: BarcodeDetector (native, GPU, langsung dari video)
+//  Mode 2: jsQR fallback (canvas crop + enhance)
 // ═══════════════════════════════════════════
 var lastScanTime  = 0;
-var SCAN_INTERVAL = 40;
+var SCAN_INTERVAL = 150; // BarcodeDetector async, tidak perlu secepat jsQR
 var missStreak    = 0;
+var scanning      = false;
 
 function scanLoop() {
   rafId = requestAnimationFrame(function() {
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      var now = Date.now();
-      if (!isProcessing && now >= cooldownUntil && now - lastScanTime >= SCAN_INTERVAL) {
+    var now = Date.now();
+    if (!isProcessing && !scanning && now >= cooldownUntil && now - lastScanTime >= SCAN_INTERVAL) {
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
         lastScanTime = now;
 
-        var vw = video.videoWidth;
-        var vh = video.videoHeight;
-        if (!vw || !vh) { scanLoop(); return; }
+        if (barcodeDetector) {
+          // ── MODE 1: Native BarcodeDetector ──
+          // Langsung scan dari video, GPU-accelerated, tidak perlu canvas
+          scanning = true;
+          barcodeDetector.detect(video)
+            .then(function(codes) {
+              scanning = false;
+              if (codes && codes.length > 0 && codes[0].rawValue) {
+                missStreak = 0;
+                handleScan(codes[0].rawValue);
+              } else {
+                missStreak++;
+              }
+            })
+            .catch(function() {
+              scanning = false;
+              missStreak++;
+            });
 
-        // Hitung crop area sesuai kotak viewfinder di layar
-        // Viewfinder = min(260px, 68vw) di tengah layar
-        // Kita petakan ke koordinat video yang sebenarnya
-        var displayW = video.offsetWidth  || vw;
-        var displayH = video.offsetHeight || vh;
+        } else if (jsQRLib) {
+          // ── MODE 2: jsQR fallback ──
+          var vw = video.videoWidth;
+          var vh = video.videoHeight;
+          if (!vw || !vh) { scanLoop(); return; }
 
-        // Skala video ke display (object-fit: cover)
-        var scaleX = vw / displayW;
-        var scaleY = vh / displayH;
-        var scale  = Math.max(scaleX, scaleY); // cover = ambil yg lebih besar
+          var displayW = video.offsetWidth  || vw;
+          var displayH = video.offsetHeight || vh;
+          var scale    = Math.max(vw / displayW, vh / displayH);
+          var vfSize   = Math.min(260, displayW * 0.68);
+          var cropSize = Math.round(vfSize * scale);
+          var cropX    = Math.max(0, Math.round((vw - cropSize) / 2));
+          var cropY    = Math.max(0, Math.round((vh - cropSize) / 2));
+          cropSize     = Math.min(cropSize, vw - cropX, vh - cropY);
 
-        // Ukuran kotak viewfinder dalam pixel display
-        var vfSize = Math.min(260, displayW * 0.68);
+          var cs = missStreak < 20 ? 320 : 480;
+          cs = Math.min(cs, cropSize);
 
-        // Konversi ke pixel video
-        var cropSize = Math.round(vfSize * scale);
-        var cropX    = Math.round((vw - cropSize) / 2);
-        var cropY    = Math.round((vh - cropSize) / 2);
+          if (canvas.width !== cs || canvas.height !== cs) {
+            canvas.width = cs; canvas.height = cs;
+          }
+          ctx.drawImage(video, cropX, cropY, cropSize, cropSize, 0, 0, cs, cs);
 
-        // Clamp agar tidak keluar bounds
-        cropX = Math.max(0, Math.min(cropX, vw - 1));
-        cropY = Math.max(0, Math.min(cropY, vh - 1));
-        cropSize = Math.min(cropSize, vw - cropX, vh - cropY);
-
-        // Target canvas 320px — cukup untuk QR sederhana, ringan untuk jsQR
-        var target = missStreak < 20 ? 320 : 480;
-        var cs = Math.min(target, cropSize);
-
-        if (canvas.width !== cs || canvas.height !== cs) {
-          canvas.width  = cs;
-          canvas.height = cs;
-        }
-
-        // Gambar hanya area crop ke canvas kecil
-        ctx.drawImage(video, cropX, cropY, cropSize, cropSize, 0, 0, cs, cs);
-
-        var imageData = ctx.getImageData(0, 0, cs, cs);
-        var d = imageData.data;
-
-        // Enhance kontras IN-PLACE (1x getImageData, bukan 2x)
-        for (var i = 0; i < d.length; i += 4) {
-          var g = (d[i] * 77 + d[i+1] * 150 + d[i+2] * 29) >> 8; // fast grayscale
-          var v = g < 128 ? (g > 40 ? g - 40 : 0) : (g < 215 ? g + 40 : 255);
-          d[i] = d[i+1] = d[i+2] = v;
-        }
-
-        var code = jsQR(d, cs, cs, { inversionAttempts: 'attemptBoth' });
-
-        if (code && code.data) {
-          missStreak = 0;
-          handleScan(code.data);
-        } else {
-          missStreak++;
+          var imageData = ctx.getImageData(0, 0, cs, cs);
+          var d = imageData.data;
+          for (var i = 0; i < d.length; i += 4) {
+            var g = (d[i]*77 + d[i+1]*150 + d[i+2]*29) >> 8;
+            var v = g < 128 ? (g > 40 ? g-40 : 0) : (g < 215 ? g+40 : 255);
+            d[i] = d[i+1] = d[i+2] = v;
+          }
+          var code = jsQRLib(d, cs, cs, { inversionAttempts: 'attemptBoth' });
+          if (code && code.data) {
+            missStreak = 0;
+            handleScan(code.data);
+          } else {
+            missStreak++;
+          }
         }
       }
     }
@@ -794,6 +815,7 @@ document.getElementById('btn-restart').addEventListener('click', function() {
   isProcessing = false;
   cooldownUntil = 0;
   missStreak = 0;
+  scanning = false;
   startCamera();
 });
 
