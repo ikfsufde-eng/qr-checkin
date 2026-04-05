@@ -40,7 +40,6 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── LAYOUT ── */
 #app {
   display: flex;
   flex-direction: column;
@@ -50,7 +49,6 @@ html, body {
   position: relative;
 }
 
-/* ── HEADER ── */
 header {
   flex-shrink: 0;
   padding: 14px 18px 12px;
@@ -83,7 +81,6 @@ header {
 .pulse-dot.err { background: var(--danger); box-shadow: 0 0 0 3px rgba(244,63,94,.2); }
 @keyframes pulse { 0%,100% { box-shadow: 0 0 0 3px rgba(0,212,170,.25); } 50% { box-shadow: 0 0 0 6px rgba(0,212,170,.08); } }
 
-/* ── GAS URL SETUP ── */
 #setup-screen {
   position: absolute; inset: 0;
   background: var(--bg);
@@ -95,6 +92,7 @@ header {
   padding: 28px 22px;
   gap: 16px;
   text-align: center;
+  overflow-y: auto;
 }
 #setup-screen .setup-icon { font-size: 48px; }
 #setup-screen h2 { font-size: 20px; font-weight: 700; }
@@ -140,7 +138,6 @@ header {
 .note-box b { color: var(--text); }
 .note-box code { color: var(--accent); font-family: var(--font-mono); font-size: 11px; }
 
-/* ── KAMERA AREA ── */
 #cam-wrap {
   flex: 1;
   position: relative;
@@ -151,14 +148,11 @@ header {
   justify-content: center;
   min-height: 0;
 }
-
 #cam-video {
   width: 100%; height: 100%;
   object-fit: cover;
   display: block;
 }
-
-/* Viewfinder overlay */
 #viewfinder {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
@@ -170,7 +164,7 @@ header {
   height: min(260px, 68vw);
   position: relative;
 }
-.vf::before { 
+.vf::before {
   content: '';
   position: fixed; inset: 0;
   background: rgba(10,15,30,.55);
@@ -188,7 +182,6 @@ header {
 .corner.bl { bottom:0; left:0;  border-width: 0 0 3px 3px; border-radius: 0 0 0 5px; }
 .corner.br { bottom:0; right:0; border-width: 0 3px 3px 0; border-radius: 0 0 5px 0; }
 
-/* Overlay izin kamera */
 #perm-overlay {
   position: absolute; inset: 0;
   background: rgba(10,15,30,.97);
@@ -205,7 +198,6 @@ header {
 #perm-overlay h2 { font-size: 18px; font-weight: 700; }
 #perm-overlay p  { font-size: 13px; color: var(--muted); line-height: 1.65; }
 
-/* ── HASIL SCAN ── */
 #result-wrap {
   flex-shrink: 0;
   padding: 12px 14px 8px;
@@ -219,7 +211,7 @@ header {
   white-space: pre-wrap;
   word-break: break-word;
   min-height: 54px;
-  max-height: 180px; 
+  max-height: 180px;
   overflow-y: auto;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -230,7 +222,6 @@ header {
 #result.err     { background:#1f0813; border-color:var(--danger); color:#fda4af; }
 #result.loading { background:#1c1405; border-color:var(--warn); color:#fde68a; }
 
-/* ── TOMBOL ── */
 #btns {
   flex-shrink: 0;
   display: grid;
@@ -262,10 +253,8 @@ header {
 #btn-reset   { background: #2d0a14; color: #fda4af; border: 1px solid #7f1d1d; grid-column: span 2; }
 #btn-allow   { background: linear-gradient(135deg, var(--accent2), var(--accent)); color:#000; font-weight:700; width:100%; padding:15px; border-radius:12px; border:none; margin-top:4px; font-size:15px; font-family:var(--font-head); cursor:pointer; }
 
-/* ── CANVAS (tersembunyi, untuk decode QR) ── */
 #qr-canvas { display: none; }
 
-/* ── ANIMASI MASUK ── */
 @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
 header, #result-wrap, #btns { animation: fadeUp .4s ease both; }
 header        { animation-delay: .05s; }
@@ -281,7 +270,7 @@ header        { animation-delay: .05s; }
     <h2>Konfigurasi Web App</h2>
     <p>Masukkan URL Google Apps Script Web App kamu agar scanner bisa terhubung ke Google Sheet.</p>
     <input id="gas-url-input" type="url" placeholder="https://script.google.com/macros/s/...../exec" autocomplete="off" spellcheck="false">
-    <button id="btn-save-url">Simpan & Mulai Scanner</button>
+    <button id="btn-save-url">Simpan &amp; Mulai Scanner</button>
     <div class="note-box">
       <b>Cara dapat URL ini:</b><br>
       1. Buka <b>Apps Script</b> → <b>Deploy</b> → <b>New deployment</b><br>
@@ -410,10 +399,15 @@ function checkSetup() {
   return true;
 }
 
+// ✅ FIX: Validasi diperlonggar, cukup harus https://
 document.getElementById('btn-save-url').addEventListener('click', function() {
   var val = document.getElementById('gas-url-input').value.trim();
-  if (!val.startsWith('https://script.google.com/macros/s/')) {
-    alert('❌ URL tidak valid. Harus dimulai dengan:\nhttps://script.google.com/macros/s/');
+  if (!val) {
+    alert('❌ URL tidak boleh kosong.');
+    return;
+  }
+  if (!val.startsWith('https://')) {
+    alert('❌ URL tidak valid. Harus diawali dengan https://');
     return;
   }
   gasUrl = val;
@@ -542,24 +536,23 @@ document.getElementById('btn-file').addEventListener('click', function() {
 
 document.getElementById('file-input').addEventListener('change', function(e) {
   if (e.target.files && e.target.files.length > 0) {
-    let file = e.target.files[0];
-    let reader = new FileReader();
-    
+    var file = e.target.files[0];
+    var reader = new FileReader();
+
     setResult('⏳ Membaca gambar...', 'loading');
-    
+
     reader.onload = function(event) {
-      let img = new Image();
+      var img = new Image();
       img.onload = function() {
-        // Gunakan temporary canvas untuk membaca imageData dari file gambar
-        let tempCanvas = document.createElement('canvas');
-        let tempCtx = tempCanvas.getContext('2d');
+        var tempCanvas = document.createElement('canvas');
+        var tempCtx = tempCanvas.getContext('2d');
         tempCanvas.width = img.width;
         tempCanvas.height = img.height;
         tempCtx.drawImage(img, 0, 0, img.width, img.height);
-        
-        let imageData = tempCtx.getImageData(0, 0, img.width, img.height);
-        let code = jsQR(imageData.data, img.width, img.height, { inversionAttempts: "dontInvert" });
-        
+
+        var imageData = tempCtx.getImageData(0, 0, img.width, img.height);
+        var code = jsQR(imageData.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+
         if (code && code.data) {
           handleScan(code.data);
         } else {
@@ -570,12 +563,11 @@ document.getElementById('file-input').addEventListener('change', function(e) {
     };
     reader.readAsDataURL(file);
   }
-  // Reset value input agar bisa pilih gambar yang sama lagi nanti
   e.target.value = '';
 });
 
 // ═══════════════════════════════════════════
-//  HANDLE SCAN (Kamera & Gambar)
+//  HANDLE SCAN
 // ═══════════════════════════════════════════
 function handleScan(decodedText) {
   var id = String(decodedText).trim();
@@ -610,13 +602,10 @@ function handleScan(decodedText) {
       setResult((res && res.message) || 'Terjadi kesalahan.', 'err');
       setDot('err');
     }
-    
-    // Cooldown dipercepat agar bisa baca QR baru, TAPI pesan tetap tampil
     cooldownUntil = Date.now() + 2500;
     setTimeout(function() {
-      isProcessing = false; // Buka kunci agar kamera bisa baca lagi
+      isProcessing = false;
       setDot('on');
-      // Pesan TIDAK DIHAPUS agar bisa disalin
     }, 2500);
   })
   .catch(function(err) {
@@ -653,4 +642,46 @@ function doReset() {
     }
   })
   .catch(function(err) {
-    
+    setResult('❌ Gagal reset:\n' + err.message, 'err');
+  });
+}
+
+// ═══════════════════════════════════════════
+//  TOMBOL LAINNYA
+// ═══════════════════════════════════════════
+document.getElementById('btn-restart').addEventListener('click', function() {
+  lastScanned = null;
+  isProcessing = false;
+  cooldownUntil = 0;
+  startCamera();
+});
+
+document.getElementById('btn-copy').addEventListener('click', function() {
+  var text = document.getElementById('result').textContent;
+  if (!text) { return; }
+  navigator.clipboard.writeText(text).then(function() {
+    var btn = document.getElementById('btn-copy');
+    var orig = btn.textContent;
+    btn.textContent = '✅ Tersalin!';
+    setTimeout(function() { btn.textContent = orig; }, 1500);
+  }).catch(function() {
+    alert('Teks hasil scan:\n\n' + text);
+  });
+});
+
+document.getElementById('btn-reset').addEventListener('click', doReset);
+
+document.getElementById('btn-allow').addEventListener('click', function() {
+  showPerm(false);
+  startCamera();
+});
+
+// ═══════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════
+if (checkSetup()) {
+  startCamera();
+}
+</script>
+</body>
+</html>
