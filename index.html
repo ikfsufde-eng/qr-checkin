@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0a0f1e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>QR Check4-in out berkas by Dimas Satrio Wibowo S.Kel, MM</title>
+<title>QR Check5-in out berkas by Dimas Satrio Wibowo S.Kel, MM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
 
@@ -588,25 +588,13 @@ function stopCamera() {
 }
 
 // ═══════════════════════════════════════════
-//  QR SCAN LOOP — MAXIMUM SPEED
+//  QR SCAN LOOP — CROP + FAST
+//  Hanya scan area dalam kotak viewfinder,
+//  bukan seluruh frame — jauh lebih cepat
 // ═══════════════════════════════════════════
 var lastScanTime  = 0;
-var SCAN_INTERVAL = 50;   // ms — lebih agresif dari 80ms
+var SCAN_INTERVAL = 40;
 var missStreak    = 0;
-
-function enhanceImageData(imageData) {
-  // Tingkatkan kontras pixel sebelum dikirim ke jsQR
-  // QR code hitam-putih = kontras tinggi → lebih mudah dibaca
-  var d = imageData.data;
-  for (var i = 0; i < d.length; i += 4) {
-    // Grayscale dulu
-    var gray = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
-    // Stretch kontras: tarik ke hitam atau putih
-    var v = gray < 128 ? Math.max(0, gray - 30) : Math.min(255, gray + 30);
-    d[i] = d[i+1] = d[i+2] = v;
-  }
-  return imageData;
-}
 
 function scanLoop() {
   rafId = requestAnimationFrame(function() {
@@ -617,29 +605,55 @@ function scanLoop() {
 
         var vw = video.videoWidth;
         var vh = video.videoHeight;
+        if (!vw || !vh) { scanLoop(); return; }
 
-        // Resolusi adaptif: mulai 640px, naik jika terus gagal
-        var maxSide = missStreak < 15 ? 640 : missStreak < 30 ? 800 : 1024;
-        var scale = Math.min(1, maxSide / Math.max(vw, vh));
-        var w = Math.round(vw * scale);
-        var h = Math.round(vh * scale);
+        // Hitung crop area sesuai kotak viewfinder di layar
+        // Viewfinder = min(260px, 68vw) di tengah layar
+        // Kita petakan ke koordinat video yang sebenarnya
+        var displayW = video.offsetWidth  || vw;
+        var displayH = video.offsetHeight || vh;
 
-        if (canvas.width !== w || canvas.height !== h) {
-          canvas.width  = w;
-          canvas.height = h;
+        // Skala video ke display (object-fit: cover)
+        var scaleX = vw / displayW;
+        var scaleY = vh / displayH;
+        var scale  = Math.max(scaleX, scaleY); // cover = ambil yg lebih besar
+
+        // Ukuran kotak viewfinder dalam pixel display
+        var vfSize = Math.min(260, displayW * 0.68);
+
+        // Konversi ke pixel video
+        var cropSize = Math.round(vfSize * scale);
+        var cropX    = Math.round((vw - cropSize) / 2);
+        var cropY    = Math.round((vh - cropSize) / 2);
+
+        // Clamp agar tidak keluar bounds
+        cropX = Math.max(0, Math.min(cropX, vw - 1));
+        cropY = Math.max(0, Math.min(cropY, vh - 1));
+        cropSize = Math.min(cropSize, vw - cropX, vh - cropY);
+
+        // Target canvas 320px — cukup untuk QR sederhana, ringan untuk jsQR
+        var target = missStreak < 20 ? 320 : 480;
+        var cs = Math.min(target, cropSize);
+
+        if (canvas.width !== cs || canvas.height !== cs) {
+          canvas.width  = cs;
+          canvas.height = cs;
         }
-        ctx.drawImage(video, 0, 0, w, h);
 
-        var imageData = ctx.getImageData(0, 0, w, h);
+        // Gambar hanya area crop ke canvas kecil
+        ctx.drawImage(video, cropX, cropY, cropSize, cropSize, 0, 0, cs, cs);
 
-        // Coba tanpa enhance dulu (lebih cepat)
-        var code = jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' });
+        var imageData = ctx.getImageData(0, 0, cs, cs);
+        var d = imageData.data;
 
-        // Kalau gagal, coba dengan kontras ditingkatkan
-        if (!code) {
-          var enhanced = enhanceImageData(ctx.getImageData(0, 0, w, h));
-          code = jsQR(enhanced.data, w, h, { inversionAttempts: 'attemptBoth' });
+        // Enhance kontras IN-PLACE (1x getImageData, bukan 2x)
+        for (var i = 0; i < d.length; i += 4) {
+          var g = (d[i] * 77 + d[i+1] * 150 + d[i+2] * 29) >> 8; // fast grayscale
+          var v = g < 128 ? (g > 40 ? g - 40 : 0) : (g < 215 ? g + 40 : 255);
+          d[i] = d[i+1] = d[i+2] = v;
         }
+
+        var code = jsQR(d, cs, cs, { inversionAttempts: 'attemptBoth' });
 
         if (code && code.data) {
           missStreak = 0;
