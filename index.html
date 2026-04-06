@@ -493,17 +493,23 @@ function checkSetup() {
   return true;
 }
 
-// ✅ FIX: Validasi diperlonggar, cukup harus https://
+// ✅ FIX: Validasi diperketat agar tidak salah URL dev/edit
 document.getElementById('btn-save-url').addEventListener('click', function() {
   var val = document.getElementById('gas-url-input').value.trim();
+  
   if (!val) {
     alert('❌ URL tidak boleh kosong.');
     return;
   }
-  if (!val.startsWith('https://')) {
-    alert('❌ URL tidak valid. Harus diawali dengan https://');
+  if (!val.startsWith('https://script.google.com/')) {
+    alert('❌ URL tidak valid. Harus link dari Google Apps Script (https://script.google.com/...).');
     return;
   }
+  if (val.includes('/dev') || val.includes('/edit')) {
+    alert('❌ JANGAN gunakan URL /dev atau /edit.\n\nWajib gunakan URL dari hasil Deployment baru yang berakhiran "/exec".');
+    return;
+  }
+
   gasUrl = val;
   localStorage.setItem(STORAGE_KEY, gasUrl);
   showSetup(false);
@@ -746,9 +752,11 @@ function handleScan(decodedText) {
     return;
   }
 
+  // ✅ FIX: Tambah redirect 'follow' dan ubah Content-Type jadi text/plain
   fetch(gasUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    redirect: 'follow',
     body: JSON.stringify({ action: 'checkin', id: id })
   })
   .then(function(r) {
@@ -788,9 +796,11 @@ function doReset() {
   var idToReset = lastScanned;
   setResult('⏳ Mereset ID: ' + idToReset + '…', 'loading');
 
+  // ✅ FIX: Tambah redirect 'follow' dan ubah Content-Type jadi text/plain
   fetch(gasUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    redirect: 'follow',
     body: JSON.stringify({ action: 'reset', id: idToReset })
   })
   .then(function(r) { return r.json(); })
