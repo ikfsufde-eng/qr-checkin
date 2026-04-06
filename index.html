@@ -6,12 +6,11 @@
 <meta name="theme-color" content="#0a0f1e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>QR2 Check-in out berkas by Dimas Satrio Wibowo S.Kel, MM</title>
+<title>QR3 Check-in | by Dimas Satrio Wibowo S.Kel, MM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
 
 <style>
-/* ── RESET & BASE ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
@@ -81,6 +80,7 @@ header {
 .pulse-dot.err { background: var(--danger); box-shadow: 0 0 0 3px rgba(244,63,94,.2); }
 @keyframes pulse { 0%,100% { box-shadow: 0 0 0 3px rgba(0,212,170,.25); } 50% { box-shadow: 0 0 0 6px rgba(0,212,170,.08); } }
 
+/* ── SETUP SCREEN ── */
 #setup-screen {
   position: absolute; inset: 0;
   background: var(--bg);
@@ -138,6 +138,7 @@ header {
 .note-box b { color: var(--text); }
 .note-box code { color: var(--accent); font-family: var(--font-mono); font-size: 11px; }
 
+/* ── KAMERA ── */
 #cam-wrap {
   flex: 1;
   position: relative;
@@ -163,7 +164,6 @@ header {
   width: min(260px, 68vw);
   height: min(260px, 68vw);
   position: relative;
-  /* Shadow keluar ke semua arah = area luar gelap, dalam CLEAR */
   box-shadow: 0 0 0 9999px rgba(10,15,30,.60);
   border-radius: 4px;
 }
@@ -178,8 +178,6 @@ header {
 .corner.tr { top:0; right:0; border-width: 3px 3px 0 0; border-radius: 0 5px 0 0; }
 .corner.bl { bottom:0; left:0;  border-width: 0 0 3px 3px; border-radius: 0 0 0 5px; }
 .corner.br { bottom:0; right:0; border-width: 0 3px 3px 0; border-radius: 0 0 5px 0; }
-
-/* Garis scan bergerak */
 .scan-line {
   position: absolute;
   left: 4px; right: 4px;
@@ -214,6 +212,7 @@ header {
 #perm-overlay h2 { font-size: 18px; font-weight: 700; }
 #perm-overlay p  { font-size: 13px; color: var(--muted); line-height: 1.65; }
 
+/* ── RESULT ── */
 #result-wrap {
   flex-shrink: 0;
   padding: 12px 14px 8px;
@@ -238,6 +237,7 @@ header {
 #result.err     { background:#1f0813; border-color:var(--danger); color:#fda4af; }
 #result.loading { background:#1c1405; border-color:var(--warn); color:#fde68a; }
 
+/* ── TOMBOL ── */
 #btns {
   flex-shrink: 0;
   display: grid;
@@ -282,10 +282,7 @@ header {
   display: block;
   letter-spacing: 0.3px;
 }
-.manual-row {
-  display: flex;
-  gap: 8px;
-}
+.manual-row { display: flex; gap: 8px; }
 #manual-input {
   flex: 1;
   background: var(--surface2);
@@ -320,19 +317,19 @@ header {
 #qr-canvas { display: none; }
 
 @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
-header, #result-wrap, #btns { animation: fadeUp .4s ease both; }
-header        { animation-delay: .05s; }
-#result-wrap  { animation-delay: .12s; }
-#btns         { animation-delay: .18s; }
+header        { animation: fadeUp .4s ease both .05s; }
+#result-wrap  { animation: fadeUp .4s ease both .12s; }
+#btns         { animation: fadeUp .4s ease both .18s; }
 </style>
 </head>
 <body>
 <div id="app">
 
+  <!-- SETUP SCREEN -->
   <div id="setup-screen">
     <div class="setup-icon">⚙️</div>
     <h2>Konfigurasi Web App</h2>
-    <p>Masukkan URL Google Apps Script Web App kamu agar scanner bisa terhubung ke Google Sheet.</p>
+    <p>Masukkan URL Google Apps Script Web App agar scanner bisa terhubung ke Google Sheet.</p>
     <input id="gas-url-input" type="url" placeholder="https://script.google.com/macros/s/...../exec" autocomplete="off" spellcheck="false">
     <button id="btn-save-url">Simpan &amp; Mulai Scanner</button>
     <div class="note-box">
@@ -341,8 +338,8 @@ header        { animation-delay: .05s; }
       2. Type: <b>Web App</b><br>
       3. Execute as: <b>Me</b><br>
       4. Who has access: <b>Anyone</b><br>
-      5. Copy URL yang muncul, paste di atas<br><br>
-      <b>Penting:</b> Setiap update <code>Code.gs</code>, buat deployment baru agar URL tetap valid.
+      5. Copy URL yang muncul (berakhiran <code>/exec</code>), paste di atas<br><br>
+      <b>Penting:</b> Setiap update <code>Code.gs</code>, buat deployment baru agar perubahan aktif.
     </div>
   </div>
 
@@ -372,13 +369,13 @@ header        { animation-delay: .05s; }
     <div id="perm-overlay">
       <div class="perm-icon">🚫</div>
       <h2>Akses Kamera Ditolak</h2>
-      <p>Chrome membutuhkan izin kamera. Ikuti langkah berikut:</p>
+      <p>Browser membutuhkan izin kamera. Ikuti langkah berikut:</p>
       <div class="note-box" style="text-align:left">
-        <b>Di Chrome Android:</b><br>
+        <b>Chrome Android:</b><br>
         Ketuk 🔒 di address bar → <b>Izin Situs</b> → <b>Kamera</b> → <b>Izinkan</b> → Reload<br><br>
-        <b>Di Chrome Desktop:</b><br>
+        <b>Chrome Desktop:</b><br>
         Klik 🔒/📷 di address bar → <b>Camera</b> → <b>Allow</b> → Reload<br><br>
-        <b>Pastikan</b> halaman dibuka via HTTPS (GitHub Pages sudah HTTPS otomatis).
+        <b>Pastikan</b> halaman dibuka via HTTPS.
       </div>
       <button class="btn" id="btn-allow">🎥 Coba Lagi</button>
     </div>
@@ -397,7 +394,7 @@ header        { animation-delay: .05s; }
   </div>
 
   <div id="btns">
-    <input type="file" id="file-input" accept="image/*" style="display: none;">
+    <input type="file" id="file-input" accept="image/*" style="display:none">
     <button class="btn" id="btn-restart">🔄 Restart</button>
     <button class="btn" id="btn-file">📂 Pilih Gambar</button>
     <button class="btn" id="btn-copy">📋 Salin</button>
@@ -425,25 +422,23 @@ var rafId        = null;
 var isProcessing = false;
 var lastScanned  = null;
 var cooldownUntil= 0;
-var barcodeDetector = null; // Native BarcodeDetector API
-var jsQRLib      = null;    // Fallback jsQR
+var barcodeDetector = null;
+var jsQRLib      = null;
 
 // ═══════════════════════════════════════════
-//  INIT DETECTOR — pakai native API dulu,
-//  fallback ke jsQR kalau tidak support
+//  INIT DETECTOR
 // ═══════════════════════════════════════════
 function initDetector() {
   if ('BarcodeDetector' in window) {
     try {
       barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
-      console.log('✅ Pakai BarcodeDetector (native GPU-accelerated)');
+      console.log('✅ BarcodeDetector (native)');
       return;
     } catch(e) {}
   }
-  // Load jsQR sebagai fallback
   var s = document.createElement('script');
   s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
-  s.onload = function() { jsQRLib = jsQR; console.log('✅ Pakai jsQR (fallback)'); };
+  s.onload = function() { jsQRLib = jsQR; console.log('✅ jsQR (fallback)'); };
   document.head.appendChild(s);
 }
 initDetector();
@@ -456,20 +451,16 @@ function setResult(text, cls) {
   el.className = cls || 'info';
   el.textContent = text;
 }
-
 function setDot(state) {
   var d = document.getElementById('dot');
   d.className = 'pulse-dot' + (state ? ' ' + state : '');
 }
-
 function showPerm(show) {
   document.getElementById('perm-overlay').style.display = show ? 'flex' : 'none';
 }
-
 function showSetup(show) {
   document.getElementById('setup-screen').style.display = show ? 'flex' : 'none';
 }
-
 function updateUrlLabel() {
   var label = document.getElementById('url-label');
   if (gasUrl) {
@@ -484,32 +475,21 @@ function updateUrlLabel() {
 //  SETUP SCREEN
 // ═══════════════════════════════════════════
 function checkSetup() {
-  if (!gasUrl) {
-    showSetup(true);
-    return false;
-  }
+  if (!gasUrl) { showSetup(true); return false; }
   showSetup(false);
   updateUrlLabel();
   return true;
 }
 
-// ✅ FIX: Validasi diperketat agar tidak salah URL dev/edit
 document.getElementById('btn-save-url').addEventListener('click', function() {
   var val = document.getElementById('gas-url-input').value.trim();
-  
-  if (!val) {
-    alert('❌ URL tidak boleh kosong.');
-    return;
-  }
+  if (!val) { alert('❌ URL tidak boleh kosong.'); return; }
   if (!val.startsWith('https://script.google.com/')) {
-    alert('❌ URL tidak valid. Harus link dari Google Apps Script (https://script.google.com/...).');
-    return;
+    alert('❌ URL tidak valid. Harus dari Google Apps Script.'); return;
   }
   if (val.includes('/dev') || val.includes('/edit')) {
-    alert('❌ JANGAN gunakan URL /dev atau /edit.\n\nWajib gunakan URL dari hasil Deployment baru yang berakhiran "/exec".');
-    return;
+    alert('❌ Gunakan URL deployment berakhiran "/exec", bukan /dev atau /edit.'); return;
   }
-
   gasUrl = val;
   localStorage.setItem(STORAGE_KEY, gasUrl);
   showSetup(false);
@@ -532,34 +512,25 @@ function startCamera() {
   setResult('📷 Meminta izin kamera…', 'info');
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    setResult('❌ Browser tidak mendukung kamera.\nGunakan Chrome/Safari versi terbaru.', 'err');
+    setResult('❌ Browser tidak mendukung kamera. Gunakan Chrome/Safari terbaru.', 'err');
     setDot('err');
     return;
   }
 
   navigator.mediaDevices.getUserMedia({
-    video: {
-      facingMode: { ideal: 'environment' },
-      width:  { ideal: 1920 },
-      height: { ideal: 1080 }
-    },
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
     audio: false
   })
   .then(function(s) {
     stream = s;
     video.srcObject = s;
-
-    // Aktifkan continuous autofocus jika didukung HP
     try {
       var track = s.getVideoTracks()[0];
       var caps  = track.getCapabilities ? track.getCapabilities() : {};
       var constraints = {};
-      if (caps.focusMode && caps.focusMode.indexOf('continuous') !== -1) {
-        constraints.focusMode = 'continuous';
-      }
+      if (caps.focusMode && caps.focusMode.indexOf('continuous') !== -1) constraints.focusMode = 'continuous';
       if (Object.keys(constraints).length) track.applyConstraints({ advanced: [constraints] });
-    } catch(e) { /* diabaikan jika HP tidak support */ }
-
+    } catch(e) {}
     video.onloadedmetadata = function() {
       video.play();
       setDot('on');
@@ -568,21 +539,18 @@ function startCamera() {
     };
   })
   .catch(function(err) {
-    var msg = '';
     if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
       showPerm(true);
-      msg = '🚫 Kamera diblokir. Lihat panduan di atas.';
+      setResult('🚫 Kamera diblokir. Lihat panduan di atas.', 'err');
     } else if (err.name === 'NotFoundError') {
-      msg = '❌ Tidak ada kamera ditemukan di perangkat ini.';
-    } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-      msg = '⚠️ Kamera sedang dipakai aplikasi lain. Tutup aplikasi lain lalu restart.';
+      setResult('❌ Tidak ada kamera di perangkat ini.', 'err');
+    } else if (err.name === 'NotReadableError') {
+      setResult('⚠️ Kamera dipakai aplikasi lain. Tutup lalu restart.', 'err');
     } else if (err.name === 'OverconstrainedError') {
-      fallbackCamera();
-      return;
+      fallbackCamera(); return;
     } else {
-      msg = '⚠️ Gagal akses kamera: ' + err.name + ' — ' + err.message;
+      setResult('⚠️ Gagal akses kamera: ' + err.name, 'err');
     }
-    setResult(msg, 'err');
     setDot('err');
   });
 }
@@ -590,12 +558,10 @@ function startCamera() {
 function fallbackCamera() {
   navigator.mediaDevices.getUserMedia({ video: true, audio: false })
   .then(function(s) {
-    stream = s;
-    video.srcObject = s;
+    stream = s; video.srcObject = s;
     video.onloadedmetadata = function() {
-      video.play();
-      setDot('on');
-      setResult('📷 Kamera siap (mode fallback). Arahkan ke QR Code.', 'info');
+      video.play(); setDot('on');
+      setResult('📷 Kamera siap (fallback).', 'info');
       scanLoop();
     };
   })
@@ -607,20 +573,15 @@ function fallbackCamera() {
 
 function stopCamera() {
   if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-  if (stream) {
-    stream.getTracks().forEach(function(t) { t.stop(); });
-    stream = null;
-  }
+  if (stream) { stream.getTracks().forEach(function(t) { t.stop(); }); stream = null; }
   video.srcObject = null;
 }
 
 // ═══════════════════════════════════════════
 //  QR SCAN LOOP
-//  Mode 1: BarcodeDetector (native, GPU, langsung dari video)
-//  Mode 2: jsQR fallback (canvas crop + enhance)
 // ═══════════════════════════════════════════
 var lastScanTime  = 0;
-var SCAN_INTERVAL = 150; // BarcodeDetector async, tidak perlu secepat jsQR
+var SCAN_INTERVAL = 150;
 var missStreak    = 0;
 var scanning      = false;
 
@@ -632,8 +593,6 @@ function scanLoop() {
         lastScanTime = now;
 
         if (barcodeDetector) {
-          // ── MODE 1: Native BarcodeDetector ──
-          // Langsung scan dari video, GPU-accelerated, tidak perlu canvas
           scanning = true;
           barcodeDetector.detect(video)
             .then(function(codes) {
@@ -641,22 +600,14 @@ function scanLoop() {
               if (codes && codes.length > 0 && codes[0].rawValue) {
                 missStreak = 0;
                 handleScan(codes[0].rawValue);
-              } else {
-                missStreak++;
-              }
+              } else { missStreak++; }
             })
-            .catch(function() {
-              scanning = false;
-              missStreak++;
-            });
+            .catch(function() { scanning = false; missStreak++; });
 
         } else if (jsQRLib) {
-          // ── MODE 2: jsQR fallback ──
-          var vw = video.videoWidth;
-          var vh = video.videoHeight;
+          var vw = video.videoWidth, vh = video.videoHeight;
           if (!vw || !vh) { scanLoop(); return; }
-
-          var displayW = video.offsetWidth  || vw;
+          var displayW = video.offsetWidth || vw;
           var displayH = video.offsetHeight || vh;
           var scale    = Math.max(vw / displayW, vh / displayH);
           var vfSize   = Math.min(260, displayW * 0.68);
@@ -664,15 +615,10 @@ function scanLoop() {
           var cropX    = Math.max(0, Math.round((vw - cropSize) / 2));
           var cropY    = Math.max(0, Math.round((vh - cropSize) / 2));
           cropSize     = Math.min(cropSize, vw - cropX, vh - cropY);
-
           var cs = missStreak < 20 ? 320 : 480;
           cs = Math.min(cs, cropSize);
-
-          if (canvas.width !== cs || canvas.height !== cs) {
-            canvas.width = cs; canvas.height = cs;
-          }
+          if (canvas.width !== cs || canvas.height !== cs) { canvas.width = cs; canvas.height = cs; }
           ctx.drawImage(video, cropX, cropY, cropSize, cropSize, 0, 0, cs, cs);
-
           var imageData = ctx.getImageData(0, 0, cs, cs);
           var d = imageData.data;
           for (var i = 0; i < d.length; i += 4) {
@@ -681,12 +627,8 @@ function scanLoop() {
             d[i] = d[i+1] = d[i+2] = v;
           }
           var code = jsQRLib(d, cs, cs, { inversionAttempts: 'attemptBoth' });
-          if (code && code.data) {
-            missStreak = 0;
-            handleScan(code.data);
-          } else {
-            missStreak++;
-          }
+          if (code && code.data) { missStreak = 0; handleScan(code.data); }
+          else { missStreak++; }
         }
       }
     }
@@ -695,47 +637,55 @@ function scanLoop() {
 }
 
 // ═══════════════════════════════════════════
-//  SCAN DARI GAMBAR (FILE MANAGER)
+//  SCAN DARI FILE GAMBAR
 // ═══════════════════════════════════════════
 document.getElementById('btn-file').addEventListener('click', function() {
   document.getElementById('file-input').click();
 });
 
 document.getElementById('file-input').addEventListener('change', function(e) {
-  if (e.target.files && e.target.files.length > 0) {
-    var file = e.target.files[0];
-    var reader = new FileReader();
-
-    setResult('⏳ Membaca gambar...', 'loading');
-
-    reader.onload = function(event) {
-      var img = new Image();
-      img.onload = function() {
-        var tempCanvas = document.createElement('canvas');
-        var tempCtx = tempCanvas.getContext('2d');
-        tempCanvas.width = img.width;
-        tempCanvas.height = img.height;
-        tempCtx.drawImage(img, 0, 0, img.width, img.height);
-
-        var imageData = tempCtx.getImageData(0, 0, img.width, img.height);
-        var code = jsQR(imageData.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
-
-        if (code && code.data) {
-          handleScan(code.data);
-        } else {
-          setResult('❌ QR Code tidak ditemukan pada gambar tersebut.', 'err');
-        }
-      };
-      img.src = event.target.result;
+  if (!e.target.files || !e.target.files.length) return;
+  var file = e.target.files[0];
+  var reader = new FileReader();
+  setResult('⏳ Membaca gambar...', 'loading');
+  reader.onload = function(event) {
+    var img = new Image();
+    img.onload = function() {
+      var tc = document.createElement('canvas');
+      var tx = tc.getContext('2d');
+      tc.width = img.width; tc.height = img.height;
+      tx.drawImage(img, 0, 0);
+      var imageData = tx.getImageData(0, 0, img.width, img.height);
+      var lib = jsQRLib || jsQR;
+      if (!lib) { setResult('❌ Library jsQR belum siap, coba lagi.', 'err'); return; }
+      var code = lib(imageData.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
+      if (code && code.data) handleScan(code.data);
+      else setResult('❌ QR Code tidak ditemukan pada gambar.', 'err');
     };
-    reader.readAsDataURL(file);
-  }
+    img.src = event.target.result;
+  };
+  reader.readAsDataURL(file);
   e.target.value = '';
 });
 
 // ═══════════════════════════════════════════
-//  HANDLE SCAN
+//  HANDLE SCAN — PAKAI GET REQUEST (BYPASS CORS)
 // ═══════════════════════════════════════════
+function callGAS(action, id, onSuccess, onError) {
+  if (!gasUrl) {
+    onError('GAS URL belum diatur. Ketuk ⚙️ Config.');
+    return;
+  }
+  var url = gasUrl + '?action=' + encodeURIComponent(action) + '&id=' + encodeURIComponent(id);
+  fetch(url, { method: 'GET', redirect: 'follow' })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(res) { onSuccess(res); })
+    .catch(function(err) { onError(err.message); });
+}
+
 function handleScan(decodedText) {
   var id = String(decodedText).trim();
   if (!id) return;
@@ -745,125 +695,77 @@ function handleScan(decodedText) {
   setResult('⏳ Memproses ID: ' + id + '…', 'loading');
   setDot('');
 
-  if (!gasUrl) {
-    setResult('⚠️ GAS URL belum diatur. Ketuk ⚙️ Config.', 'err');
-    isProcessing = false;
-    setDot('on');
-    return;
-  }
-
-  // ✅ FIX: Tambah redirect 'follow' dan ubah Content-Type jadi text/plain
-  fetch(gasUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    redirect: 'follow',
-    body: JSON.stringify({ action: 'checkin', id: id })
-  })
-  .then(function(r) {
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return r.json();
-  })
-  .then(function(res) {
-    if (res && res.status === 'success') {
-      setResult(res.message, 'ok');
-      setDot('on');
-    } else {
-      setResult((res && res.message) || 'Terjadi kesalahan.', 'err');
+  callGAS('checkin', id,
+    function(res) {
+      if (res && res.status === 'success') {
+        setResult(res.message, 'ok');
+        setDot('on');
+      } else {
+        setResult((res && res.message) || 'Terjadi kesalahan.', 'err');
+        setDot('err');
+      }
+      cooldownUntil = Date.now() + 1500;
+      setTimeout(function() { isProcessing = false; setDot('on'); }, 1500);
+    },
+    function(errMsg) {
+      setResult('❌ Gagal kirim ke server:\n' + errMsg +
+                '\n\nPastikan GAS Web App sudah di-deploy\ndengan akses "Anyone".', 'err');
       setDot('err');
+      cooldownUntil = Date.now() + 3000;
+      setTimeout(function() { isProcessing = false; }, 3000);
     }
-    cooldownUntil = Date.now() + 1500;
-    setTimeout(function() {
-      isProcessing = false;
-      setDot('on');
-    }, 1500);
-  })
-  .catch(function(err) {
-    setResult('❌ Gagal kirim ke server:\n' + err.message +
-              '\n\nPastikan GAS Web App sudah di-deploy\ndengan akses "Anyone".', 'err');
-    setDot('err');
-    cooldownUntil = Date.now() + 3000;
-    setTimeout(function() { isProcessing = false; }, 3000);
-  });
+  );
 }
 
 // ═══════════════════════════════════════════
-//  RESET
+//  RESET — JUGA PAKAI GET
 // ═══════════════════════════════════════════
 function doReset() {
   if (!lastScanned) { setResult('⚠️ Belum ada ID yang discan.', 'err'); return; }
   if (!confirm('Reset ID: ' + lastScanned + '?\n\nIni menghapus status & waktu check-in/out.')) return;
-
   var idToReset = lastScanned;
   setResult('⏳ Mereset ID: ' + idToReset + '…', 'loading');
-
-  // ✅ FIX: Tambah redirect 'follow' dan ubah Content-Type jadi text/plain
-  fetch(gasUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    redirect: 'follow',
-    body: JSON.stringify({ action: 'reset', id: idToReset })
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(res) {
-    if (res && res.status === 'success') {
-      setResult(res.message, 'ok');
-      lastScanned = null;
-    } else {
-      setResult((res && res.message) || 'Gagal reset.', 'err');
-    }
-  })
-  .catch(function(err) {
-    setResult('❌ Gagal reset:\n' + err.message, 'err');
-  });
+  callGAS('reset', idToReset,
+    function(res) {
+      if (res && res.status === 'success') { setResult(res.message, 'ok'); lastScanned = null; }
+      else setResult((res && res.message) || 'Gagal reset.', 'err');
+    },
+    function(errMsg) { setResult('❌ Gagal reset:\n' + errMsg, 'err'); }
+  );
 }
 
 // ═══════════════════════════════════════════
 //  TOMBOL LAINNYA
 // ═══════════════════════════════════════════
 document.getElementById('btn-restart').addEventListener('click', function() {
-  lastScanned = null;
-  isProcessing = false;
-  cooldownUntil = 0;
-  missStreak = 0;
-  scanning = false;
+  lastScanned = null; isProcessing = false; cooldownUntil = 0; missStreak = 0; scanning = false;
   startCamera();
 });
 
 document.getElementById('btn-copy').addEventListener('click', function() {
   var text = document.getElementById('result').textContent;
-  if (!text) { return; }
+  if (!text) return;
   navigator.clipboard.writeText(text).then(function() {
     var btn = document.getElementById('btn-copy');
     var orig = btn.textContent;
     btn.textContent = '✅ Tersalin!';
     setTimeout(function() { btn.textContent = orig; }, 1500);
-  }).catch(function() {
-    alert('Teks hasil scan:\n\n' + text);
-  });
+  }).catch(function() { alert('Teks hasil scan:\n\n' + text); });
 });
 
 document.getElementById('btn-reset').addEventListener('click', doReset);
-
-document.getElementById('btn-allow').addEventListener('click', function() {
-  showPerm(false);
-  startCamera();
-});
+document.getElementById('btn-allow').addEventListener('click', function() { showPerm(false); startCamera(); });
 
 // ═══════════════════════════════════════════
 //  INPUT MANUAL
 // ═══════════════════════════════════════════
 function submitManual() {
   var val = document.getElementById('manual-input').value.trim();
-  if (!val) {
-    setResult('⚠️ Ketik ID terlebih dahulu.', 'err');
-    return;
-  }
+  if (!val) { setResult('⚠️ Ketik ID terlebih dahulu.', 'err'); return; }
   document.getElementById('manual-input').value = '';
   handleScan(val);
 }
-
 document.getElementById('btn-manual').addEventListener('click', submitManual);
-
 document.getElementById('manual-input').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') submitManual();
 });
@@ -871,9 +773,7 @@ document.getElementById('manual-input').addEventListener('keydown', function(e) 
 // ═══════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════
-if (checkSetup()) {
-  startCamera();
-}
+if (checkSetup()) startCamera();
 </script>
 </body>
 </html>
