@@ -725,7 +725,9 @@ function doReset() {
   if (!confirm('Reset ID: ' + lastScanned + '?\n\nIni menghapus status & waktu check-in/out.')) return;
   var idToReset = lastScanned;
   setResult('⏳ Mereset ID: ' + idToReset + '…', 'loading');
-  callGAS('reset', idToReset,
+  
+  // BAGIAN INI SUDAH DIPERBAIKI MENJADI 'reset_id'
+  callGAS('reset_id', idToReset,
     function(res) {
       if (res && res.status === 'success') { setResult(res.message, 'ok'); lastScanned = null; }
       else setResult((res && res.message) || 'Gagal reset.', 'err');
