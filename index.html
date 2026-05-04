@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0a0f1e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>QR3 Check-in | by Dimas Satrio Wibowo S.Kel, MM</title>
+<title>QR4 Check-in | by Dimas Satrio Wibowo S.Kel, MM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
 
@@ -320,6 +320,18 @@ header {
 header        { animation: fadeUp .4s ease both .05s; }
 #result-wrap  { animation: fadeUp .4s ease both .12s; }
 #btns         { animation: fadeUp .4s ease both .18s; }
+
+#btn-force-update {
+  background: #450a0a; color: #fecaca; border: 1px solid #991b1b;
+  grid-column: span 2; display: none; margin-top: 8px;
+}
+#btn-force-update.show {
+  display: flex; animation: pulseAlert 1.5s infinite;
+}
+@keyframes pulseAlert {
+  0%,100% { box-shadow: 0 0 0 0 rgba(244,63,94,.4); }
+  50% { box-shadow: 0 0 0 4px rgba(244,63,94,0); }
+}
 </style>
 </head>
 <body>
@@ -400,6 +412,7 @@ header        { animation: fadeUp .4s ease both .05s; }
     <button class="btn" id="btn-copy">📋 Salin</button>
     <button class="btn" id="btn-config">⚙️ Config</button>
     <button class="btn" id="btn-reset">⏹️ Reset ID Terakhir</button>
+    <button class="btn" id="btn-force-update">⚠️ UPDATE PAKSA DATABASE DARI SPREADSHEET ⚠️</button>
   </div>
 
 </div>
@@ -695,21 +708,34 @@ function handleScan(decodedText) {
   setResult('⏳ Memproses ID: ' + id + '…', 'loading');
   setDot('');
 
+  // Sembunyikan tombol darurat setiap kali mulai scan baru
+  var btnForce = document.getElementById('btn-force-update');
+  if (btnForce) btnForce.classList.remove('show');
+
   callGAS('checkin', id,
     function(res) {
       if (res && res.status === 'success') {
         setResult(res.message, 'ok');
         setDot('on');
-      } else {
+        cooldownUntil = Date.now() + 1500;
+        setTimeout(function() { isProcessing = false; setDot('on'); }, 1500);
+      } 
+      else if (res && res.status === 'not_found') {
+        // [LAPIS 3] Gagal Total -> Munculkan Tombol Update Paksa
+        setResult(res.message, 'err');
+        setDot('err');
+        if (btnForce) btnForce.classList.add('show'); 
+        isProcessing = false; 
+      }
+      else {
         setResult((res && res.message) || 'Terjadi kesalahan.', 'err');
         setDot('err');
+        cooldownUntil = Date.now() + 1500;
+        setTimeout(function() { isProcessing = false; setDot('on'); }, 1500);
       }
-      cooldownUntil = Date.now() + 1500;
-      setTimeout(function() { isProcessing = false; setDot('on'); }, 1500);
     },
     function(errMsg) {
-      setResult('❌ Gagal kirim ke server:\n' + errMsg +
-                '\n\nPastikan GAS Web App sudah di-deploy\ndengan akses "Anyone".', 'err');
+      setResult('❌ Gagal kirim ke server:\n' + errMsg + '\n\nPastikan GAS Web App sudah di-deploy\ndengan akses "Anyone".', 'err');
       setDot('err');
       cooldownUntil = Date.now() + 3000;
       setTimeout(function() { isProcessing = false; }, 3000);
@@ -775,6 +801,38 @@ document.getElementById('manual-input').addEventListener('keydown', function(e) 
 // ═══════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+//  FUNGSI TOMBOL UPDATE PAKSA (HEMAT KUOTA)
+// ═══════════════════════════════════════════
+document.getElementById('btn-force-update').addEventListener('click', function() {
+  if (!confirm("⚠️ PERHATIAN!\n\nProses ini akan menarik ID yang belum ada dari Google Spreadsheet ke Firebase.\n\nYakin ingin melanjutkan?")) return;
+  
+  isProcessing = true;
+  setResult('⏳ Menyedot data baru dari Spreadsheet ke Firebase... Mohon tunggu...', 'loading');
+  setDot('');
+  
+  this.classList.remove('show');
+
+  callGAS('force_update_all', '0', 
+    function(res) {
+      if (res && res.status === 'success') {
+        setResult(res.message + "\n\nSilakan Scan ulang ID: " + lastScanned, 'ok');
+        setDot('on');
+      } else {
+        setResult((res && res.message) || 'Gagal update paksa.', 'err');
+        setDot('err');
+      }
+      cooldownUntil = Date.now() + 2000;
+      setTimeout(function() { isProcessing = false; setDot('on'); }, 2000);
+    },
+    function(errMsg) {
+      setResult('❌ Gagal menghubungi server saat Update Paksa:\n' + errMsg, 'err');
+      setDot('err');
+      cooldownUntil = Date.now() + 3000;
+      setTimeout(function() { isProcessing = false; }, 3000);
+    }
+  );
+});
 if (checkSetup()) startCamera();
 </script>
 </body>
