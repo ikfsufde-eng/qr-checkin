@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0a0f1e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>QR5 Check-in | by Dimas Satrio Wibowo S.Kel, MM</title>
+<title>QR6 Check-in | by Dimas Satrio Wibowo S.Kel, MM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
 
@@ -270,28 +270,17 @@ header {
   background: #2d0a14; 
   color: #fda4af; 
   border: 1px solid #7f1d1d; 
-  /* grid-column: span 2; DIHAPUS */
 }
-
 #btn-force-update {
   background: #450a0a; 
   color: #fecaca; 
   border: 1px solid #991b1b;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 12px;
-  font-family: var(--font-head);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity .15s, transform .1s;
 }
 
-#btn-force-update:active { 
-  transform: scale(0.96); 
-  opacity: .8; 
-}
+/* TAMBAHAN CSS TOMBOL MODE BERKAS */
+#btn-mode-berkas { background: var(--surface2); color: var(--text); border: 1px solid var(--border); grid-column: span 2; }
+#btn-mode-berkas.on { background: #0c4a6e; color: #7dd3fc; border-color: var(--accent2); }
+
 #btn-allow   { background: linear-gradient(135deg, var(--accent2), var(--accent)); color:#000; font-weight:700; width:100%; padding:15px; border-radius:12px; border:none; margin-top:4px; font-size:15px; font-family:var(--font-head); cursor:pointer; }
 
 /* ── INPUT MANUAL ── */
@@ -334,8 +323,6 @@ header {
   border: none;
   border-radius: 10px;
   cursor: pointer;
-  transition: opacity .15s, transform .1s;
-  -webkit-tap-highlight-color: transparent;
 }
 #btn-manual:active { transform: scale(0.96); opacity: .8; }
 
@@ -351,7 +338,6 @@ header        { animation: fadeUp .4s ease both .05s; }
 <body>
 <div id="app">
 
-  <!-- SETUP SCREEN -->
   <div id="setup-screen">
     <div class="setup-icon">⚙️</div>
     <h2>Konfigurasi Web App</h2>
@@ -421,6 +407,9 @@ header        { animation: fadeUp .4s ease both .05s; }
 
   <div id="btns">
     <input type="file" id="file-input" accept="image/*" style="display:none">
+    
+    <button class="btn" id="btn-mode-berkas">📄 Mode Berkas: OFF</button>
+    
     <button class="btn" id="btn-restart">🔄 Restart</button>
     <button class="btn" id="btn-file">📂 Pilih Gambar</button>
     <button class="btn" id="btn-copy">📋 Salin</button>
@@ -451,6 +440,9 @@ var lastScanned  = null;
 var cooldownUntil= 0;
 var barcodeDetector = null;
 var jsQRLib      = null;
+
+// TAMBAHAN STATE MODE BERKAS
+var isModeBerkas = false; 
 
 // ═══════════════════════════════════════════
 //  INIT DETECTOR
@@ -696,7 +688,7 @@ document.getElementById('file-input').addEventListener('change', function(e) {
 });
 
 // ═══════════════════════════════════════════
-//  HANDLE SCAN — PAKAI GET REQUEST (BYPASS CORS)
+//  HANDLE SCAN
 // ═══════════════════════════════════════════
 function callGAS(action, id, onSuccess, onError) {
   if (!gasUrl) {
@@ -717,6 +709,46 @@ function handleScan(decodedText) {
   var id = String(decodedText).trim();
   if (!id) return;
 
+  // ───────────────────────────────────────────
+  //  LOGIKA MODE BERKAS DIGITAL (ON)
+  // ───────────────────────────────────────────
+  if (isModeBerkas) {
+    isProcessing = true;
+    setResult('Membuka tautan berkas digital...', 'ok');
+    setDot('on');
+
+    // URL Lama dan Baru untuk Replace
+    var oldBase = "https://script.google.com/macros/s/AKfycbzPTtwUl6RtXX3BBHg8f4LUnGj9Vf-lzHXl7zzesbuccTw5ekpTByGPb5cEnx84egUo/exec";
+    var newBase = "https://script.google.com/macros/s/AKfycbyiD8iRCvsPfws2lzAcuuGtd52RE3aqtdv7Q4GeALqdCMi0eVN7_SFpPiYqU8s21i85/exec";
+
+    var newUrl = id; // id di sini adalah url lengkap hasil scan
+
+    // Jika mengandung base URL lama, replace dengan yang baru
+    if (newUrl.includes(oldBase)) {
+      newUrl = newUrl.replace(oldBase, newBase);
+    }
+
+    // Sisipkan parameter &download=true&id=A-232801 jika belum ada
+    if (!newUrl.includes("download=true")) {
+      var separator = newUrl.includes("?") ? "&" : "?";
+      newUrl += separator + "download=true&id=A-232801";
+    }
+
+    // Buka hasil modifikasi di tab baru
+    window.open(newUrl, '_blank');
+
+    // Jeda sejenak sebelum kamera siap kembali
+    cooldownUntil = Date.now() + 2000;
+    setTimeout(function() { 
+      isProcessing = false; 
+      setResult('📷 Kamera siap. Arahkan ke QR Code.', 'info'); 
+    }, 2000);
+    
+    return; 
+  }
+  // ───────────────────────────────────────────
+
+  // MODE NORMAL (OFF)
   isProcessing = true;
   lastScanned  = id;
   setResult('⏳ Memproses ID: ' + id + '…', 'loading');
@@ -731,7 +763,6 @@ function handleScan(decodedText) {
         setTimeout(function() { isProcessing = false; setDot('on'); }, 1500);
       } 
       else if (res && res.status === 'not_found') {
-        // [LAPIS 3] Gagal Total -> Minta user klik tombol manual
         setResult(res.message, 'err');
         setDot('err');
         isProcessing = false; 
@@ -753,7 +784,7 @@ function handleScan(decodedText) {
 }
 
 // ═══════════════════════════════════════════
-//  RESET — JUGA PAKAI GET
+//  RESET
 // ═══════════════════════════════════════════
 function doReset() {
   if (!lastScanned) { setResult('⚠️ Belum ada ID yang discan.', 'err'); return; }
@@ -761,7 +792,6 @@ function doReset() {
   var idToReset = lastScanned;
   setResult('⏳ Mereset ID: ' + idToReset + '…', 'loading');
   
-  // BAGIAN INI SUDAH DIPERBAIKI MENJADI 'reset_id'
   callGAS('reset_id', idToReset,
     function(res) {
       if (res && res.status === 'success') { setResult(res.message, 'ok'); lastScanned = null; }
@@ -772,8 +802,24 @@ function doReset() {
 }
 
 // ═══════════════════════════════════════════
-//  TOMBOL LAINNYA
+//  TOMBOL LAINNYA & TOGGLE MODE
 // ═══════════════════════════════════════════
+
+// EVENT LISTENER UNTUK TOGGLE MODE BERKAS
+document.getElementById('btn-mode-berkas').addEventListener('click', function() {
+  isModeBerkas = !isModeBerkas;
+  var btn = document.getElementById('btn-mode-berkas');
+  if (isModeBerkas) {
+    btn.textContent = '📄 Mode Berkas: ON';
+    btn.classList.add('on');
+    setResult('📄 Mode Berkas ON: Siap scan URL dokumen.', 'info');
+  } else {
+    btn.textContent = '📄 Mode Berkas: OFF';
+    btn.classList.remove('on');
+    setResult('📷 Mode Normal: Siap scan QR absen.', 'info');
+  }
+});
+
 document.getElementById('btn-restart').addEventListener('click', function() {
   lastScanned = null; isProcessing = false; cooldownUntil = 0; missStreak = 0; scanning = false;
   startCamera();
@@ -820,7 +866,6 @@ document.getElementById('btn-force-update').addEventListener('click', function()
   callGAS('force_update_all', '0', 
     function(res) {
       if (res && res.status === 'success') {
-        // Tampilkan pesan sukses dan ingatkan ID terakhir yang discan
         setResult(res.message + (lastScanned ? "\n\nSilakan Scan ulang ID: " + lastScanned : ""), 'ok');
         setDot('on');
       } else {
