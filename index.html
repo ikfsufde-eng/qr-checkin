@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0a0f1e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>QR6 Check-in | by Dimas Satrio Wibowo S.Kel, MM</title>
+<title>QR7 Check-in | by Dimas Satrio Wibowo S.Kel, MM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
 
@@ -911,69 +911,113 @@ document.getElementById('btn-test-system').addEventListener('click', async funct
   var logs = [];
   var errorCount = 0;
 
-  // Fungsi pembantu untuk mencatat log ke kotak hasil
-  function addLog(msg, isError) {
+  // Fungsi pembantu untuk mencatat log ke kotak hasil, lengkap dengan SOLUSI
+  function addLog(msg, isError, solution) {
     var icon = isError ? '❌ ' : '✅ ';
     logs.push(icon + msg);
-    if (isError) errorCount++;
+    
+    // Jika error dan ada panduan solusi, tambahkan ke log
+    if (isError && solution) {
+      logs.push('   💡 ' + solution);
+      errorCount++;
+    } else if (isError) {
+      errorCount++;
+    }
+    
     setResult('🩺 Diagnostik berjalan...\n\n' + logs.join('\n'), 'loading');
   }
 
-  // 1. Cek Konfigurasi URL Google Apps Script
+  // 1. Cek Konfigurasi GAS URL
   if (!gasUrl) {
-    addLog('GAS URL belum dikonfigurasi.', true);
+    addLog('GAS URL belum dikonfigurasi.', true, 'Klik ⚙️ Config dan masukkan URL.');
   } else if (!gasUrl.startsWith('https://script.google.com/')) {
-    addLog('Format GAS URL tidak sesuai.', true);
+    addLog('Format GAS URL tidak sesuai.', true, 'Gunakan URL yang diawali https://script.google.com/');
   } else {
-    addLog('GAS URL terkonfigurasi.');
+    addLog('GAS URL terkonfigurasi dengan baik.');
   }
 
-  // 2. Cek Kesiapan Library Scanner
+  // 2. Cek Library Scanner
   if (barcodeDetector) {
-    addLog('Scanner (Native) siap digunakan.');
+    addLog('Native BarcodeDetector aktif.');
   } else if (jsQRLib) {
-    addLog('Scanner (jsQR Fallback) siap.');
+    addLog('Library jsQR (fallback) aktif.');
   } else {
-    addLog('Library Scanner gagal dimuat.', true);
+    addLog('Library Scanner gagal dimuat.', true, 'Periksa koneksi internet lalu muat ulang (refresh) halaman.');
   }
 
-  // 3. Cek Status Kamera
+  // 3. Cek Kamera
   if (!stream || !stream.active) {
-    addLog('Kamera tidak aktif / izin ditolak.', true);
+    addLog('Kamera tidak aktif / izin ditolak.', true, 'Izinkan akses kamera di pengaturan browser lalu restart/refresh.');
   } else {
     addLog('Kamera terhubung (' + video.videoWidth + 'x' + video.videoHeight + ').');
   }
 
-  // 4. Cek Konektivitas Jaringan (Ping ke Endpoint)
+  // 4. Cek Jaringan / Endpoint
   if (gasUrl) {
+    addLog('Menguji koneksi ke endpoint server...');
     try {
-      // mode: 'no-cors' digunakan murni untuk mengecek apakah ada jalur internet ke server
       await fetch(gasUrl, { method: 'GET', mode: 'no-cors' });
-      addLog('Endpoint server dapat dijangkau (Internet OK).');
+      // Hapus tulisan "Menguji..." dan ganti dengan hasil sukses agar tidak kepanjangan
+      logs.pop(); 
+      addLog('Endpoint server dapat dijangkau.');
     } catch (e) {
-      addLog('Gagal menjangkau server (Cek koneksi internet).', true);
+      logs.pop();
+      addLog('Gagal menjangkau server.', true, 'Pastikan HP Anda terhubung ke jaringan internet (Data/WiFi).');
     }
   }
 
   // Menampilkan Rekap Hasil Akhir
   setTimeout(function() {
     if (errorCount === 0) {
-      setResult('🩺 TES SELESAI: Sistem Berjalan Normal.\n\n' + logs.join('\n'), 'ok');
+      setResult('🩺 TES SELESAI: Sistem berjalan normal.\n\n' + logs.join('\n'), 'ok');
       setDot('on');
     } else {
-      setResult('🩺 TES SELESAI: Ditemukan ' + errorCount + ' Masalah!\n\n' + logs.join('\n'), 'err');
+      setResult('🩺 TES SELESAI: Ditemukan ' + errorCount + ' masalah.\n\n' + logs.join('\n'), 'err');
       setDot('err');
     }
     
-    // Memberikan waktu jeda sebelum scanner bisa dipakai lagi
-    cooldownUntil = Date.now() + 5000;
+    // Memberikan waktu jeda sebelum scanner bisa dipakai lagi (agar info terbaca)
+    cooldownUntil = Date.now() + 8000;
     setTimeout(function() {
       isProcessing = false;
       if (errorCount === 0) setResult('📷 Kamera siap. Arahkan ke QR Code.', 'info');
-    }, 5000);
+    }, 8000);
 
   }, 1000);
 });
+
+// ═══════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════
+document.getElementById('btn-force-update').addEventListener('click', function() {
+  if (!confirm("⚠️ PERHATIAN!\n\nProses ini akan menarik ID yang belum ada dari Google Spreadsheet ke Firebase.\n\nYakin ingin melanjutkan?")) return;
+  
+  isProcessing = true;
+  setResult('⏳ Menyedot data baru dari Spreadsheet ke Firebase... Mohon tunggu...', 'loading');
+  setDot('');
+
+  callGAS('force_update_all', '0', 
+    function(res) {
+      if (res && res.status === 'success') {
+        setResult(res.message + (lastScanned ? "\n\nSilakan Scan ulang ID: " + lastScanned : ""), 'ok');
+        setDot('on');
+      } else {
+        setResult((res && res.message) || 'Gagal update paksa.', 'err');
+        setDot('err');
+      }
+      cooldownUntil = Date.now() + 2000;
+      setTimeout(function() { isProcessing = false; setDot('on'); }, 2000);
+    },
+    function(errMsg) {
+      setResult('❌ Gagal menghubungi server saat Update Paksa:\n' + errMsg, 'err');
+      setDot('err');
+      cooldownUntil = Date.now() + 3000;
+      setTimeout(function() { isProcessing = false; }, 3000);
+    }
+  );
+});
+
+if (checkSetup()) startCamera();
 </script>
 </body>
 </html>
