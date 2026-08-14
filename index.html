@@ -906,66 +906,73 @@ document.getElementById('btn-test-system').addEventListener('click', async funct
 
   isProcessing = true;
   setDot('');
-  setResult('🩺 Memulai diagnostik sistem...', 'loading');
+  setResult('🩺 Memulai diagnostik sistem...\nMohon tunggu...', 'loading');
 
-  let logs = [];
-  let errorCount = 0;
+  var logs = [];
+  var errorCount = 0;
 
-  // Fungsi helper untuk mencatat log ke layar
-  const addLog = (msg, isError = false) => {
-    logs.push((isError ? '❌ ' : '✅ ') + msg);
+  // Fungsi pembantu untuk mencatat log ke kotak hasil
+  function addLog(msg, isError) {
+    var icon = isError ? '❌ ' : '✅ ';
+    logs.push(icon + msg);
     if (isError) errorCount++;
-    setResult(logs.join('\n'), 'loading');
-  };
+    setResult('🩺 Diagnostik berjalan...\n\n' + logs.join('\n'), 'loading');
+  }
 
-  // 1. Cek Konfigurasi GAS URL
+  // 1. Cek Konfigurasi URL Google Apps Script
   if (!gasUrl) {
     addLog('GAS URL belum dikonfigurasi.', true);
   } else if (!gasUrl.startsWith('https://script.google.com/')) {
     addLog('Format GAS URL tidak sesuai.', true);
   } else {
-    addLog('GAS URL terkonfigurasi dengan baik.');
+    addLog('GAS URL terkonfigurasi.');
   }
 
-  // 2. Cek Library Scanner
+  // 2. Cek Kesiapan Library Scanner
   if (barcodeDetector) {
-    addLog('Native BarcodeDetector aktif.');
+    addLog('Scanner (Native) siap digunakan.');
   } else if (jsQRLib) {
-    addLog('Library jsQR (fallback) aktif.');
+    addLog('Scanner (jsQR Fallback) siap.');
   } else {
     addLog('Library Scanner gagal dimuat.', true);
   }
 
-  // 3. Cek Kamera
+  // 3. Cek Status Kamera
   if (!stream || !stream.active) {
-    addLog('Kamera tidak aktif / akses ditolak.', true);
+    addLog('Kamera tidak aktif / izin ditolak.', true);
   } else {
     addLog('Kamera terhubung (' + video.videoWidth + 'x' + video.videoHeight + ').');
   }
 
-  // 4. Cek Jaringan / Endpoint
+  // 4. Cek Konektivitas Jaringan (Ping ke Endpoint)
   if (gasUrl) {
-    addLog('Menguji koneksi ke endpoint server...');
     try {
-      // Menggunakan mode no-cors sekadar untuk mengecek apakah rute jaringan tersedia
+      // mode: 'no-cors' digunakan murni untuk mengecek apakah ada jalur internet ke server
       await fetch(gasUrl, { method: 'GET', mode: 'no-cors' });
-      addLog('Endpoint server dapat dijangkau.');
+      addLog('Endpoint server dapat dijangkau (Internet OK).');
     } catch (e) {
-      addLog('Gagal menjangkau server: Periksa koneksi internet.', true);
+      addLog('Gagal menjangkau server (Cek koneksi internet).', true);
     }
   }
 
-  // Hasil Akhir
+  // Menampilkan Rekap Hasil Akhir
   setTimeout(function() {
     if (errorCount === 0) {
-      setResult('🩺 TES SELESAI: Sistem berjalan normal.\n\n' + logs.join('\n'), 'ok');
+      setResult('🩺 TES SELESAI: Sistem Berjalan Normal.\n\n' + logs.join('\n'), 'ok');
       setDot('on');
     } else {
-      setResult('🩺 TES SELESAI: Ditemukan ' + errorCount + ' masalah.\n\n' + logs.join('\n'), 'err');
+      setResult('🩺 TES SELESAI: Ditemukan ' + errorCount + ' Masalah!\n\n' + logs.join('\n'), 'err');
       setDot('err');
     }
-    isProcessing = false;
-  }, 1500);
+    
+    // Memberikan waktu jeda sebelum scanner bisa dipakai lagi
+    cooldownUntil = Date.now() + 5000;
+    setTimeout(function() {
+      isProcessing = false;
+      if (errorCount === 0) setResult('📷 Kamera siap. Arahkan ke QR Code.', 'info');
+    }, 5000);
+
+  }, 1000);
 });
 </script>
 </body>
