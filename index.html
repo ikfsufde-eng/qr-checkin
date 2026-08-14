@@ -277,6 +277,14 @@ header {
   border: 1px solid #991b1b;
 }
 
+#btn-test-system {
+  background: #1e1e2f; 
+  color: #a78bfa; 
+  border: 1px solid #5b21b6;
+  grid-column: span 2; /* Membuat tombol membentang penuh */
+  margin-top: 4px;
+}
+
 /* TAMBAHAN CSS TOMBOL MODE BERKAS */
 #btn-mode-berkas { background: var(--surface2); color: var(--text); border: 1px solid var(--border); grid-column: span 2; }
 #btn-mode-berkas.on { background: #0c4a6e; color: #7dd3fc; border-color: var(--accent2); }
@@ -416,6 +424,8 @@ header        { animation: fadeUp .4s ease both .05s; }
     <button class="btn" id="btn-config">⚙️ Config</button>
     <button class="btn" id="btn-reset">⏹️ Reset ID Terakhir</button>
     <button class="btn" id="btn-force-update">⚠️ Update Paksa</button>
+    <!-- TAMBAHKAN BARIS INI -->
+    <button class="btn" id="btn-test-system">🩺 Jalankan Tes Sistem</button>
   </div>
 
 </div>
@@ -884,6 +894,79 @@ document.getElementById('btn-force-update').addEventListener('click', function()
   );
 });
 if (checkSetup()) startCamera();
+
+// ═══════════════════════════════════════════
+//  TES FUNGSIONAL (DIAGNOSTIK SISTEM)
+// ═══════════════════════════════════════════
+document.getElementById('btn-test-system').addEventListener('click', async function() {
+  if (isProcessing) {
+    alert("Tunggu proses saat ini selesai sebelum menjalankan tes.");
+    return;
+  }
+
+  isProcessing = true;
+  setDot('');
+  setResult('🩺 Memulai diagnostik sistem...', 'loading');
+
+  let logs = [];
+  let errorCount = 0;
+
+  // Fungsi helper untuk mencatat log ke layar
+  const addLog = (msg, isError = false) => {
+    logs.push((isError ? '❌ ' : '✅ ') + msg);
+    if (isError) errorCount++;
+    setResult(logs.join('\n'), 'loading');
+  };
+
+  // 1. Cek Konfigurasi GAS URL
+  if (!gasUrl) {
+    addLog('GAS URL belum dikonfigurasi.', true);
+  } else if (!gasUrl.startsWith('https://script.google.com/')) {
+    addLog('Format GAS URL tidak sesuai.', true);
+  } else {
+    addLog('GAS URL terkonfigurasi dengan baik.');
+  }
+
+  // 2. Cek Library Scanner
+  if (barcodeDetector) {
+    addLog('Native BarcodeDetector aktif.');
+  } else if (jsQRLib) {
+    addLog('Library jsQR (fallback) aktif.');
+  } else {
+    addLog('Library Scanner gagal dimuat.', true);
+  }
+
+  // 3. Cek Kamera
+  if (!stream || !stream.active) {
+    addLog('Kamera tidak aktif / akses ditolak.', true);
+  } else {
+    addLog('Kamera terhubung (' + video.videoWidth + 'x' + video.videoHeight + ').');
+  }
+
+  // 4. Cek Jaringan / Endpoint
+  if (gasUrl) {
+    addLog('Menguji koneksi ke endpoint server...');
+    try {
+      // Menggunakan mode no-cors sekadar untuk mengecek apakah rute jaringan tersedia
+      await fetch(gasUrl, { method: 'GET', mode: 'no-cors' });
+      addLog('Endpoint server dapat dijangkau.');
+    } catch (e) {
+      addLog('Gagal menjangkau server: Periksa koneksi internet.', true);
+    }
+  }
+
+  // Hasil Akhir
+  setTimeout(function() {
+    if (errorCount === 0) {
+      setResult('🩺 TES SELESAI: Sistem berjalan normal.\n\n' + logs.join('\n'), 'ok');
+      setDot('on');
+    } else {
+      setResult('🩺 TES SELESAI: Ditemukan ' + errorCount + ' masalah.\n\n' + logs.join('\n'), 'err');
+      setDot('err');
+    }
+    isProcessing = false;
+  }, 1500);
+});
 </script>
 </body>
 </html>
