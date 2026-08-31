@@ -277,16 +277,6 @@ header {
   border: 1px solid #991b1b;
 }
 
-/* TAMBAHAN CSS TOMBOL MODE BERKAS & TES SISTEM */
-#btn-mode-berkas { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
-#btn-mode-berkas.on { background: #0c4a6e; color: #7dd3fc; border-color: var(--accent2); }
-
-#btn-test-system {
-  background: #1e1e2f; 
-  color: #a78bfa; 
-  border: 1px solid #5b21b6;
-}
-
 #btn-allow   { background: linear-gradient(135deg, var(--accent2), var(--accent)); color:#000; font-weight:700; width:100%; padding:15px; border-radius:12px; border:none; margin-top:4px; font-size:15px; font-family:var(--font-head); cursor:pointer; }
 
 /* ── INPUT MANUAL ── */
@@ -339,6 +329,29 @@ header        { animation: fadeUp .4s ease both .05s; }
 #result-wrap  { animation: fadeUp .4s ease both .12s; }
 #btns         { animation: fadeUp .4s ease both .18s; }
 
+/* CONTAINER 3 KOLOM KHUSUS FITUR UTAMA */
+.btn-row-3 {
+  grid-column: span 2;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.btn-row-3 .btn {
+  padding: 12px 4px;
+  font-size: 11.5px;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* WARNA MASING-MASING TOMBOL FITUR */
+#btn-decode-mode { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+#btn-decode-mode.on { background: #064e3b; color: #6ee7b7; border-color: var(--accent); }
+
+#btn-mode-berkas { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+#btn-mode-berkas.on { background: #0c4a6e; color: #7dd3fc; border-color: var(--accent2); }
+
+#btn-test-system { background: #1e1e2f; color: #a78bfa; border: 1px solid #5b21b6; }
 </style>
 </head>
 <body>
@@ -414,19 +427,18 @@ header        { animation: fadeUp .4s ease both .05s; }
   <div id="btns">
     <input type="file" id="file-input" accept="image/*" style="display:none">
     
-    <!-- Baris 1 -->
-    <button class="btn" id="btn-mode-berkas">📄 Mode Berkas: OFF</button>
-    <button class="btn" id="btn-test-system">🩺 Tes Sistem</button>
+    <div class="btn-row-3">
+      <button class="btn" id="btn-decode-mode">🔒 Decode: OFF</button>
+      <button class="btn" id="btn-mode-berkas">📄 Berkas: OFF</button>
+      <button class="btn" id="btn-test-system">🩺 Tes Sistem</button>
+    </div>
     
-    <!-- Baris 2 -->
     <button class="btn" id="btn-restart">🔄 Restart</button>
     <button class="btn" id="btn-file">📂 Pilih Gambar</button>
     
-    <!-- Baris 3 -->
     <button class="btn" id="btn-copy">📋 Salin</button>
     <button class="btn" id="btn-config">⚙️ Config</button>
     
-    <!-- Baris 4 -->
     <button class="btn" id="btn-reset">⏹️ Reset ID Terakhir</button>
     <button class="btn" id="btn-force-update">⚠️ Update Paksa</button>
   </div>
@@ -454,8 +466,10 @@ var cooldownUntil= 0;
 var barcodeDetector = null;
 var jsQRLib      = null;
 
-// TAMBAHAN STATE MODE BERKAS
+// STATE TOGGLE FITUR
 var isModeBerkas = false; 
+var isDecodeMode = false;
+var SECRET_KEY   = 55; // Kunci XOR simetris sesuai rumus Google Sheet
 
 // ═══════════════════════════════════════════
 //  INIT DETECTOR
@@ -701,8 +715,34 @@ document.getElementById('file-input').addEventListener('change', function(e) {
 });
 
 // ═══════════════════════════════════════════
-//  HANDLE SCAN
+//  HANDLE SCAN & DECODER
 // ═══════════════════════════════════════════
+
+// Fungsi pembongkar enkripsi XOR Hex
+function decodeToken(tokenStr) {
+  try {
+    if (!tokenStr.startsWith("ENC-")) return null;
+    var hex = tokenStr.replace("ENC-", "").trim();
+    var rawText = "";
+    for (var i = 0; i < hex.length; i += 2) {
+      var charCode = parseInt(hex.substr(i, 2), 16);
+      var originalCharCode = charCode ^ SECRET_KEY;
+      rawText += String.fromCharCode(originalCharCode);
+    }
+    var parts = rawText.split("|");
+    if (parts.length >= 1 && parts[0]) {
+      return {
+        id: parts[0].trim(),
+        nama: parts[1] ? parts[1].trim() : "",
+        kapal: parts[2] ? parts[2].trim() : ""
+      };
+    }
+    return null;
+  } catch(e) {
+    return null;
+  }
+}
+
 function callGAS(action, id, onSuccess, onError) {
   if (!gasUrl) {
     onError('GAS URL belum diatur. Ketuk ⚙️ Config.');
@@ -723,6 +763,24 @@ function handleScan(decodedText) {
   if (!id) return;
 
   // ───────────────────────────────────────────
+  //  LOGIKA MODE DECODE (ON)
+  // ───────────────────────────────────────────
+  if (isDecodeMode) {
+    if (id.startsWith("ENC-")) {
+      var tokenData = decodeToken(id);
+      if (tokenData && tokenData.id) {
+        id = tokenData.id; // Mengambil ID hasil decode (contoh: A-234524)
+      } else {
+        setResult('❌ Token QR tidak valid / rusak.', 'err');
+        setDot('err');
+        cooldownUntil = Date.now() + 2000;
+        setTimeout(function() { isProcessing = false; }, 2000);
+        return;
+      }
+    }
+  }
+
+  // ───────────────────────────────────────────
   //  LOGIKA MODE BERKAS DIGITAL (ON)
   // ───────────────────────────────────────────
   if (isModeBerkas) {
@@ -730,27 +788,22 @@ function handleScan(decodedText) {
     setResult('Membuka tautan berkas digital...', 'ok');
     setDot('on');
 
-    // URL Lama dan Baru untuk Replace
     var oldBase = "https://script.google.com/macros/s/AKfycbzPTtwUl6RtXX3BBHg8f4LUnGj9Vf-lzHXl7zzesbuccTw5ekpTByGPb5cEnx84egUo/exec";
     var newBase = "https://script.google.com/macros/s/AKfycbyiD8iRCvsPfws2lzAcuuGtd52RE3aqtdv7Q4GeALqdCMi0eVN7_SFpPiYqU8s21i85/exec";
 
-    var newUrl = id; // id di sini adalah url lengkap hasil scan
+    var newUrl = id;
 
-    // Jika mengandung base URL lama, replace dengan yang baru
     if (newUrl.includes(oldBase)) {
       newUrl = newUrl.replace(oldBase, newBase);
     }
 
-    // Sisipkan parameter &download=true&id=A-232801 jika belum ada
     if (!newUrl.includes("download=true")) {
       var separator = newUrl.includes("?") ? "&" : "?";
-      newUrl += separator + "download=true&id=A-232801";
+      newUrl += separator + "download=true&id=" + encodeURIComponent(id);
     }
 
-    // Buka hasil modifikasi di tab baru
     window.open(newUrl, '_blank');
 
-    // Jeda sejenak sebelum kamera siap kembali
     cooldownUntil = Date.now() + 2000;
     setTimeout(function() { 
       isProcessing = false; 
@@ -759,9 +812,10 @@ function handleScan(decodedText) {
     
     return; 
   }
-  // ───────────────────────────────────────────
 
-  // MODE NORMAL (OFF)
+  // ───────────────────────────────────────────
+  //  MODE NORMAL (OFF) -> Kirim ke GAS
+  // ───────────────────────────────────────────
   isProcessing = true;
   lastScanned  = id;
   setResult('⏳ Memproses ID: ' + id + '…', 'loading');
@@ -818,18 +872,33 @@ function doReset() {
 //  TOMBOL LAINNYA & TOGGLE MODE
 // ═══════════════════════════════════════════
 
-// EVENT LISTENER UNTUK TOGGLE MODE BERKAS
+// TOGGLE MODE DECODE
+document.getElementById('btn-decode-mode').addEventListener('click', function() {
+  isDecodeMode = !isDecodeMode;
+  var btn = document.getElementById('btn-decode-mode');
+  if (isDecodeMode) {
+    btn.textContent = '🔓 Decode: ON';
+    btn.classList.add('on');
+    setResult('🔓 Mode Decode: ON\nToken acak (ENC-...) akan otomatis diekstrak menjadi ID.', 'info');
+  } else {
+    btn.textContent = '🔒 Decode: OFF';
+    btn.classList.remove('on');
+    setResult('🔒 Mode Decode: OFF\nScanner membaca QR teks/ID polos biasa.', 'info');
+  }
+});
+
+// TOGGLE MODE BERKAS
 document.getElementById('btn-mode-berkas').addEventListener('click', function() {
   isModeBerkas = !isModeBerkas;
   var btn = document.getElementById('btn-mode-berkas');
   if (isModeBerkas) {
-    btn.textContent = '📄 Mode Berkas: ON';
+    btn.textContent = '📄 Berkas: ON';
     btn.classList.add('on');
-    setResult('📄 Mode Berkas ON: Siap scan URL dokumen.', 'info');
+    setResult('📄 Mode Berkas ON: Siap scan URL berkas digital.', 'info');
   } else {
-    btn.textContent = '📄 Mode Berkas: OFF';
+    btn.textContent = '📄 Berkas: OFF';
     btn.classList.remove('on');
-    setResult('📷 Mode Normal: Siap scan QR absen.', 'info');
+    setResult('📷 Mode Normal: Siap scan ID absen.', 'info');
   }
 });
 
@@ -867,7 +936,7 @@ document.getElementById('manual-input').addEventListener('keydown', function(e) 
 });
 
 // ═══════════════════════════════════════════
-//  INIT
+//  INIT & FORCE UPDATE
 // ═══════════════════════════════════════════
 document.getElementById('btn-force-update').addEventListener('click', function() {
   if (!confirm("⚠️ PERHATIAN!\n\nProses ini akan menarik ID yang belum ada dari Google Spreadsheet ke Firebase.\n\nYakin ingin melanjutkan?")) return;
@@ -914,12 +983,11 @@ document.getElementById('btn-test-system').addEventListener('click', async funct
   var logs = [];
   var errorCount = 0;
 
-  // Fungsi pembantu untuk mencatat log
   function addLog(msg, isError, solution) {
     var icon = isError ? '❌ ' : '✅ ';
     logs.push(icon + msg);
     if (isError && solution) {
-      logs.push('   💡 ' + solution);
+      logs.push('    💡 ' + solution);
       errorCount++;
     } else if (isError) {
       errorCount++;
@@ -973,18 +1041,15 @@ document.getElementById('btn-test-system').addEventListener('click', async funct
     addLog('Menguji kecepatan koneksi ke server...');
     try {
       var startTime = Date.now();
-      // Menambahkan cache: 'no-store' dan parameter unik agar tes benar-benar memanggil internet, bukan cache memori
       var testUrl = gasUrl + (gasUrl.includes('?') ? '&' : '?') + 'pingtest=' + startTime;
       await fetch(testUrl, { method: 'GET', mode: 'no-cors', cache: 'no-store' });
       var latency = Date.now() - startTime;
       
-      logs.pop(); // Hapus teks "Menguji..." agar rapi
+      logs.pop();
       
       if (latency > 4000) {
-        // Jika balasan di atas 4 detik
         addLog('Jaringan sangat lambat (' + latency + 'ms).', true, 'Sinyal kurang stabil, proses absen akan memakan waktu lebih lama / rentan Timeout.');
       } else if (latency > 2000) {
-        // Jika balasan 2-4 detik
         addLog('Jaringan kurang optimal (' + latency + 'ms).');
       } else {
         addLog('Koneksi server sangat cepat (' + latency + 'ms).');
@@ -1005,7 +1070,6 @@ document.getElementById('btn-test-system').addEventListener('click', async funct
       setDot('err');
     }
     
-    // Memberikan waktu jeda lebih lama (8 detik) agar pengguna bisa membaca log-nya
     cooldownUntil = Date.now() + 8000;
     setTimeout(function() {
       isProcessing = false;
