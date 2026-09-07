@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0a0f1e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>QR7 Check-in | by Dimas Satrio Wibowo S.Kel, MM</title>
+<title>QR8 Check-in | by Dimas Satrio Wibowo S.Kel, MM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
 
@@ -358,24 +358,69 @@ header        { animation: fadeUp .4s ease both .05s; }
 <div id="app">
 
 <div id="setup-screen">
-    <div class="setup-icon">⚙️</div>
-    <h2>Konfigurasi Web App</h2>
-    <p>Masukkan URL Google Apps Script Web App agar scanner bisa terhubung ke Google Sheet.</p>
-    
-    <!-- Cukup pakai SATU baris input ini saja -->
-    <input id="gas-url-input" type="url" value="https://script.google.com/macros/s/AKfycbxPOaggZZk8_7ubtDxPB3Vfa8rtUkd_wy7g_VCAS_6yv9alxRY9DXywbGakeuZg4gFo/exec" placeholder="https://script.google.com/macros/s/...../exec" autocomplete="off" spellcheck="false">
-    
-    <button id="btn-save-url">Simpan &amp; Mulai Scanner</button>
-    <div class="note-box">
-      <b>Cara dapat URL ini:</b><br>
-      1. Buka <b>Apps Script</b> → <b>Deploy</b> → <b>New deployment</b><br>
-      2. Type: <b>Web App</b><br>
-      3. Execute as: <b>Me</b><br>
-      4. Who has access: <b>Anyone</b><br>
-      5. Copy URL yang muncul (berakhiran <code>/exec</code>), paste di atas<br><br>
-      <b>Penting:</b> Setiap update <code>Code.gs</code>, buat deployment baru agar perubahan aktif.
-    </div>
+  <div class="setup-icon">⚙️</div>
+  <h2>Konfigurasi Web App</h2>
+  <p>Masukkan URL kustom Anda atau gunakan URL sistem bawaan.</p>
+  
+  <!-- Tombol untuk isi URL default -->
+  <button id="btn-use-default" style="margin-bottom: 10px; background-color: #6c757d; color: white; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer;">
+    Gunakan URL Default
+  </button>
+  
+  <!-- Kotak input URL -->
+  <input id="gas-url-input" type="url" placeholder="https://script.google.com/macros/s/...../exec" autocomplete="off" spellcheck="false" style="width: 100%; padding: 8px; margin-bottom: 15px; box-sizing: border-box;">
+  
+  <!-- Tombol Simpan -->
+  <button id="btn-save-url" style="width: 100%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+    Simpan &amp; Mulai Scanner
+  </button>
+  
+  <div class="note-box" style="margin-top: 15px; font-size: 0.9em; color: #555;">
+    <b>Cara dapat URL ini (Untuk Custom):</b><br>
+    1. Buka <b>Apps Script</b> → <b>Deploy</b> → <b>New deployment</b><br>
+    2. Type: <b>Web App</b><br>
+    3. Execute as: <b>Me</b><br>
+    4. Who has access: <b>Anyone</b><br>
+    5. Copy URL yang muncul (berakhiran <code>/exec</code>), paste di atas<br><br>
+    <b>Penting:</b> Setiap update <code>Code.gs</code>, buat deployment baru agar perubahan aktif.
   </div>
+</div>
+
+<script>
+  // 1. URL Default Anda
+  const URL_DEFAULT = "https://script.google.com/macros/s/AKfycbxPOaggZZk8_7ubtDxPB3Vfa8rtUkd_wy7g_VCAS_6yv9alxRY9DXywbGakeuZg4gFo/exec";
+
+  // Cek apakah sebelumnya sudah ada URL yang disimpan, jika ada tampilkan di kotak
+  const savedUrl = localStorage.getItem('gas_url');
+  if (savedUrl) {
+    document.getElementById('gas-url-input').value = savedUrl;
+  }
+
+  // 2. Aksi saat tombol "Gunakan URL Default" diklik
+  document.getElementById('btn-use-default').addEventListener('click', function() {
+    document.getElementById('gas-url-input').value = URL_DEFAULT;
+  });
+
+  // 3. Aksi saat tombol "Simpan & Mulai Scanner" diklik
+  document.getElementById('btn-save-url').addEventListener('click', function() {
+    const inputUrl = document.getElementById('gas-url-input').value.trim();
+    
+    if (inputUrl === "") {
+      alert("URL tidak boleh kosong!");
+      return;
+    }
+    
+    // Simpan URL ke penyimpanan browser
+    localStorage.setItem('gas_url', inputUrl);
+    
+    // Sembunyikan layar setup dan mulai fungsi scanner Anda
+    // document.getElementById('setup-screen').style.display = 'none';
+    alert("URL berhasil disimpan! Scanner siap dimulai.");
+    
+    // Panggil fungsi untuk menyalakan kamera/scanner di sini
+    // startScanner(); 
+  });
+</script>
   
   <header>
     <div class="logo">📡</div>
