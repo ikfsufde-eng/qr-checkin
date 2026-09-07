@@ -357,11 +357,14 @@ header        { animation: fadeUp .4s ease both .05s; }
 <body>
 <div id="app">
 
-  <div id="setup-screen">
+<div id="setup-screen">
     <div class="setup-icon">⚙️</div>
     <h2>Konfigurasi Web App</h2>
     <p>Masukkan URL Google Apps Script Web App agar scanner bisa terhubung ke Google Sheet.</p>
-    <input id="gas-url-input" type="url" placeholder="https://script.google.com/macros/s/...../exec" autocomplete="off" spellcheck="false">
+    
+    <!-- Cukup pakai SATU baris input ini saja -->
+    <input id="gas-url-input" type="url" value="https://script.google.com/macros/s/AKfycbxPOaggZZk8_7ubtDxPB3Vfa8rtUkd_wy7g_VCAS_6yv9alxRY9DXywbGakeuZg4gFo/exec" placeholder="https://script.google.com/macros/s/...../exec" autocomplete="off" spellcheck="false">
+    
     <button id="btn-save-url">Simpan &amp; Mulai Scanner</button>
     <div class="note-box">
       <b>Cara dapat URL ini:</b><br>
@@ -373,7 +376,7 @@ header        { animation: fadeUp .4s ease both .05s; }
       <b>Penting:</b> Setiap update <code>Code.gs</code>, buat deployment baru agar perubahan aktif.
     </div>
   </div>
-
+  
   <header>
     <div class="logo">📡</div>
     <div class="header-text">
