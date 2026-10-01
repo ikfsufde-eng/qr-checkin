@@ -352,6 +352,9 @@ header        { animation: fadeUp .4s ease both .05s; }
 #btn-mode-berkas.on { background: #0c4a6e; color: #7dd3fc; border-color: var(--accent2); }
 
 #btn-test-system { background: #1e1e2f; color: #a78bfa; border: 1px solid #5b21b6; }
+#btn-offline { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+#btn-offline.on { background: #422006; color: #fcd34d; border-color: var(--warn); }
+#btn-sync { background: #0c4a6e; color: #7dd3fc; border: 1px solid var(--accent2); }
 </style>
 </head>
 <body>
@@ -480,15 +483,22 @@ header        { animation: fadeUp .4s ease both .05s; }
       <button class="btn" id="btn-mode-berkas">📄 Berkas: OFF</button>
       <button class="btn" id="btn-test-system">🩺 Tes Sistem</button>
     </div>
+    <div class="btn-row-3">
+      <button class="btn" id="btn-offline">📴 Offline: OFF</button>
+      <button class="btn" id="btn-sync">☁️ Sync (0)</button>
+      <button class="btn" id="btn-restart">🔄 Restart</button>
+    </div>
+    <div class="btn-row-3">
+      <button class="btn" id="btn-restart">🔄 Restart</button>
+      <button class="btn" id="btn-file">📂 Pilih Gambar</button>
+      <button class="btn" id="btn-copy">📋 Salin</button>
+    </div>
+    <div class="btn-row-3">
+      <button class="btn" id="btn-config">⚙️ Config</button>
+      <button class="btn" id="btn-reset">⏹️ Reset ID Terakhir</button>
+      <button class="btn" id="btn-force-update">⚠️ Update Paksa</button>
+    </div>
     
-    <button class="btn" id="btn-restart">🔄 Restart</button>
-    <button class="btn" id="btn-file">📂 Pilih Gambar</button>
-    
-    <button class="btn" id="btn-copy">📋 Salin</button>
-    <button class="btn" id="btn-config">⚙️ Config</button>
-    
-    <button class="btn" id="btn-reset">⏹️ Reset ID Terakhir</button>
-    <button class="btn" id="btn-force-update">⚠️ Update Paksa</button>
   </div>
 
 </div>
@@ -860,7 +870,7 @@ function handleScan(decodedText) {
     
     return; 
   }
-
+  if (isOfflineMode) { handleOfflineScan(id); return; }
   // ───────────────────────────────────────────
   //  MODE NORMAL (OFF) -> Kirim ke GAS
   // ───────────────────────────────────────────
@@ -1012,6 +1022,135 @@ document.getElementById('btn-force-update').addEventListener('click', function()
       setTimeout(function() { isProcessing = false; }, 3000);
     }
   );
+});
+// ═══ OFFLINE: IndexedDB (profil) + localStorage (antrean) ═══
+var QKEY = 'qr8_queue';
+var BG_INTERVAL = 10 * 60 * 1000;   // X menit, ubah sesuka Anda
+var isOfflineMode = false, bgBusy = false, syncing = false;
+
+function idb() {
+  return new Promise(function(res, rej) {
+    var r = indexedDB.open('qr8db', 1);
+    r.onupgradeneeded = function() {
+      r.result.createObjectStore('profiles', { keyPath: 'id' });
+      r.result.createObjectStore('meta', { keyPath: 'k' });
+    };
+    r.onsuccess = function() { res(r.result); };
+    r.onerror = function() { rej(r.error); };
+  });
+}
+function idbGet(store, key) {
+  return idb().then(function(db) {
+    return new Promise(function(res, rej) {
+      var q = db.transaction(store).objectStore(store).get(key);
+      q.onsuccess = function() { res(q.result); };
+      q.onerror = function() { rej(q.error); };
+    });
+  });
+}
+function idbApply(profiles, serverTime) {
+  return idb().then(function(db) {
+    return new Promise(function(res, rej) {
+      var tx = db.transaction(['profiles', 'meta'], 'readwrite');
+      var ps = tx.objectStore('profiles');
+      profiles.forEach(function(p) {
+        if (p.deleted) ps.delete(p.id); else ps.put(p);
+      });
+      tx.objectStore('meta').put({ k: 'lastSync', v: serverTime });
+      tx.oncomplete = res;
+      tx.onerror = function() { rej(tx.error); };
+    });
+  });
+}
+
+function qGet() { try { return JSON.parse(localStorage.getItem(QKEY) || '[]'); } catch(e) { return []; } }
+function qSet(a) { localStorage.setItem(QKEY, JSON.stringify(a)); updateBadge(); }
+function updateBadge() { document.getElementById('btn-sync').textContent = '☁️ Sync (' + qGet().length + ')'; }
+
+// ── Background sync diam-diam (hanya PATCH/delta) ──
+function bgSync() {
+  if (!gasUrl || !navigator.onLine || bgBusy || isProcessing) return;
+  bgBusy = true;
+  idbGet('meta', 'lastSync').then(function(m) {
+    var since = m ? m.v : 0;   // 0 = pertama kali, tarik semua
+    return fetch(gasUrl + '?action=get_profiles&since=' + since, { redirect: 'follow' })
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(res) {
+        if (!res || res.status !== 'success') throw new Error('bad response');
+        return idbApply(res.profiles || [], res.serverTime);
+      });
+  }).catch(function(e) { console.log('bgSync skip:', e.message); })
+    .then(function() { bgBusy = false; });
+}
+setInterval(bgSync, BG_INTERVAL);
+window.addEventListener('online', bgSync);
+document.addEventListener('visibilitychange', function() { if (!document.hidden) bgSync(); });
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+setTimeout(bgSync, 3000);
+updateBadge();
+
+// ── Scan saat mode offline ──
+function handleOfflineScan(id) {
+  isProcessing = true;
+  idbGet('profiles', id).then(function(p) {
+    var ts = Date.now();
+    if (!p) {
+      setResult('❌ ID ' + id + ' tidak ada di data lokal.\nData belum tersinkron atau ID salah.', 'err');
+      setDot('err');
+    } else {
+      var q = qGet();
+      q.push({ qid: ts + '-' + Math.random().toString(36).slice(2, 8), id: id, ts: ts });
+      qSet(q);
+      setResult('✅ (OFFLINE) ' + p.nama + '\nKapal: ' + p.kapal + '\nID: ' + id +
+                '\nJam: ' + new Date(ts).toLocaleTimeString('id-ID'), 'ok');
+      setDot('on');
+    }
+    cooldownUntil = Date.now() + 1500;
+    setTimeout(function() { isProcessing = false; }, 1500);
+  }).catch(function() {
+    setResult('❌ Gagal baca data lokal.', 'err');
+    isProcessing = false;
+  });
+}
+
+// ── Tombol Sync: data hanya dihapus setelah server KONFIRMASI ──
+function syncQueue() {
+  if (syncing) return;
+  var q = qGet();
+  if (!q.length) { setResult('✅ Antrean kosong, tidak ada yang perlu dikirim.', 'ok'); return; }
+  if (!navigator.onLine) { setResult('📴 Belum ada sinyal. ' + q.length + ' data aman di HP.', 'err'); return; }
+  syncing = true;
+  setResult('⏳ Mengirim ' + q.length + ' data…', 'loading');
+
+  fetch(gasUrl, {
+    method: 'POST', redirect: 'follow',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // hindari preflight CORS
+    body: JSON.stringify({ action: 'sync_batch', items: q.slice(0, 50) })
+  })
+  .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+  .then(function(res) {
+    if (!res || res.status !== 'success' || !Array.isArray(res.accepted))
+      throw new Error((res && res.message) || 'Server tidak mengonfirmasi');
+    var ok = {};
+    res.accepted.forEach(function(x) { ok[x] = 1; });
+    qSet(qGet().filter(function(x) { return !ok[x.qid]; }));   // hapus HANYA yang dikonfirmasi
+    syncing = false;
+    var sisa = qGet().length;
+    if (sisa && res.accepted.length) { syncQueue(); return; }  // lanjut batch berikutnya
+    setResult(sisa ? '⚠️ Sisa ' + sisa + ' data belum terkonfirmasi.' : '✅ Semua data sudah masuk database online.', sisa ? 'err' : 'ok');
+  })
+  .catch(function(e) {
+    syncing = false;
+    setResult('❌ Gagal kirim: ' + e.message + '\nData TETAP aman di HP (' + qGet().length + '). Tekan Sync lagi saat sinyal bagus.', 'err');
+  });
+}
+
+document.getElementById('btn-sync').addEventListener('click', syncQueue);
+document.getElementById('btn-offline').addEventListener('click', function() {
+  isOfflineMode = !isOfflineMode;
+  this.textContent = isOfflineMode ? '📴 Offline: ON' : '📴 Offline: OFF';
+  this.classList.toggle('on', isOfflineMode);
+  setResult(isOfflineMode ? '📴 Mode Offline ON\nScan dibaca dari data lokal, dicatat ke antrean.' : '📷 Mode Online. Scan langsung ke server.', 'info');
 });
 if (checkSetup()) startCamera();
 
