@@ -874,6 +874,31 @@ function handleScan(decodedText) {
   }
   if (isOfflineMode) { handleOfflineScan(id); return; }
   // ───────────────────────────────────────────
+  //  LOGIKA MODE CEK STATUS (ON)
+  // ───────────────────────────────────────────
+  if (isModeCek) {
+    isProcessing = true;
+    setResult('⏳ Mengecek status ID: ' + id + '...', 'loading');
+    setDot('');
+
+    var cekUrl = "https://script.google.com/macros/s/AKfycbyIkDej3qauwaYyPRwZzqoVnGDPhJKfjx1wT4sJrv-JTl0JQ2AOB-YLeKGlhLswagnD4w/exec?id=" + encodeURIComponent(id);
+
+    fetch(cekUrl)
+      .then(function(r) { return r.text(); })
+      .then(function(res) {
+        setResult("🔎 HASIL CEK (" + id + "):\n" + res, 'info');
+        setDot('on');
+        setTimeout(function() { isProcessing = false; }, 2500);
+      })
+      .catch(function(err) {
+        setResult('❌ Gagal cek status. Pastikan internet aktif.', 'err');
+        setDot('err');
+        setTimeout(function() { isProcessing = false; }, 2000);
+      });
+      
+    return; // <--- SANGAT PENTING: Mencegah sistem lanjut melakukan Check-in
+  }
+  // ───────────────────────────────────────────
   //  MODE NORMAL (OFF) -> Kirim ke GAS
   // ───────────────────────────────────────────
   isProcessing = true;
@@ -986,31 +1011,25 @@ document.getElementById('btn-allow').addEventListener('click', function() { show
 // ═══════════════════════════════════════════
 document.getElementById('btn-manual').addEventListener('click', submitManual);
 
+// Variabel untuk menyimpan status mode
+var isModeCek = false; 
+
 document.getElementById('btn-cek-status').addEventListener('click', function() {
-  var idToCheck = document.getElementById('manual-input').value.trim() || lastScanned;
-  if (!idToCheck) {
-    setResult('⚠️ Ketik ID atau scan QR dulu untuk cek status.', 'err');
-    return;
-}
-
-isProcessing = true;
-setResult('⏳ Mengecek status: ' + idToCheck + '...', 'loading');
-
-var url = "https://script.google.com/macros/s/AKfycbyIkDej3qauwaYyPRwZzqoVnGDPhJKfjx1wT4sJrv-JTl0JQ2AOB-YLeKGlhLswagnD4w/exec?id=" + encodeURIComponent(idToCheck);
-
-fetch(url)
-  .then(function(r) { return r.json(); })
-  .then(function(res) {
-// Menampilkan balasan JSON dengan format rapi
-    setResult("🔎 HASIL CEK (" + idToCheck + "):\n" + JSON.stringify(res, null, 2), 'info');
-    document.getElementById('manual-input').value = '';
-    setTimeout(function() { isProcessing = false; }, 2000);
-  })
-  .catch(function(err) {
-    setResult('❌ Gagal cek status. Pastikan internet aktif.', 'err');
-    setTimeout(function() { isProcessing = false; }, 2000);
-  });
-}); 
+  isModeCek = !isModeCek; // Balikkan status (dari OFF ke ON, atau sebaliknya)
+  var btn = this;
+  
+  if (isModeCek) {
+    btn.textContent = 'Cek: ON';
+    btn.style.background = '#0c4a6e'; 
+    btn.style.color = '#7dd3fc';
+    setResult('🔎 Mode Cek Status: ON\nSilakan scan QR atau ketik ID. Sistem HANYA akan mengecek data tanpa melakukan absen.', 'info');
+  } else {
+    btn.textContent = 'Cek: OFF';
+    btn.style.background = 'var(--surface2)';
+    btn.style.color = 'var(--accent2)';
+    setResult('📷 Mode Normal: ON\nSiap scan untuk absen (Check-in/Check-out).', 'info');
+  }
+});
   
 function submitManual() {
   var val = document.getElementById('manual-input').value.trim();
