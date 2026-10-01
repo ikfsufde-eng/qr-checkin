@@ -818,9 +818,24 @@ function callGAS(action, id, onSuccess, onError) {
     .catch(function(err) { onError(err.message); });
 }
 
+// [PERBAIKAN] 2 Variabel ini ditaruh TEPAT DI ATAS function handleScan
+var lastScannedID = "";
+var lastScannedTime = 0;
+
 function handleScan(decodedText) {
   var id = String(decodedText).trim();
   if (!id) return;
+
+  // ───────────────────────────────────────────
+  //  [PERBAIKAN] CEGAH CHECK-OUT SENDIRI (JEDA 7 DETIK)
+  // ───────────────────────────────────────────
+  // Jika ID yang discan sama persis dengan barusan, dan belum ada 7 detik (7000 ms), abaikan.
+  if (id === lastScannedID && (Date.now() - lastScannedTime < 7000)) {
+     return; 
+  }
+  // Catat ID dan waktu scan saat ini
+  lastScannedID = id;
+  lastScannedTime = Date.now();
 
   // ───────────────────────────────────────────
   //  LOGIKA MODE DECODE (ON)
