@@ -1184,15 +1184,15 @@ document.getElementById('btn-offline').addEventListener('click', function() {
   isOfflineMode = !isOfflineMode;
   this.textContent = isOfflineMode ? '📴 Offline: ON' : '📴 Offline: OFF';
   this.classList.toggle('on', isOfflineMode);
-  
-  if (!isOfflineMode) { 
-    setResult('📷 Mode Online. Scan langsung ke server.', 'info'); 
-    return; 
-  }
-  
-  // Kode baru: Selalu tarik data (Sync Profil) setiap kali Mode Offline dinyalakan
-  setResult('⏳ Beralih ke Offline. Menarik pembaruan data profil dari server...', 'loading');
-  bgSync(true); 
+  if (!isOfflineMode) { setResult('📷 Mode Online. Scan langsung ke server.', 'info'); return; }
+  idbCount().then(function(n) {
+    if (n === 0) {
+      setResult('⚠️ Data lokal masih kosong. Mencoba menarik dari server…', 'loading');
+      bgSync(true);
+    } else {
+      setResult('📴 Mode Offline ON\n' + n + ' profil tersimpan di HP.', 'info');
+    }
+  });
 });
 if (checkSetup()) startCamera();
 
