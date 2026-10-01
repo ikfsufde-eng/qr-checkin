@@ -1062,19 +1062,44 @@ function qSet(a) { localStorage.setItem(QKEY, JSON.stringify(a)); updateBadge();
 function updateBadge() { document.getElementById('btn-sync').textContent = '☁️ Sync (' + qGet().length + ')'; }
 
 // ── Background sync diam-diam (hanya PATCH/delta) ──
-function bgSync() {
-  if (!gasUrl || !navigator.onLine || bgBusy || isProcessing) return;
+function bgSync(verbose) {
+  var show = (verbose === true);
+  if (!gasUrl) { if (show) setResult('❌ GAS URL belum diatur.', 'err'); return; }
+  if (!navigator.onLine) { if (show) setResult('📴 Tidak ada sinyal, tidak bisa menarik data.', 'err'); return; }
+  if (bgBusy) { if (show) setResult('⏳ Sync sedang berjalan, tunggu sebentar.', 'loading'); return; }
+  if (isProcessing && !show) return;
   bgBusy = true;
+  if (show) setResult('⏳ Menarik data profil dari server…', 'loading');
+
   idbGet('meta', 'lastSync').then(function(m) {
-    var since = m ? m.v : 0;   // 0 = pertama kali, tarik semua
+    var since = m ? m.v : 0;
     return fetch(gasUrl + '?action=get_profiles&since=' + since, { redirect: 'follow' })
       .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function(res) {
-        if (!res || res.status !== 'success') throw new Error('bad response');
-        return idbApply(res.profiles || [], res.serverTime);
+        if (!res || res.status !== 'success') {
+          throw new Error((res && res.message) || 'Respons bukan success (URL lama / GAS belum di-deploy ulang?)');
+        }
+        var list = res.profiles || [];
+        return idbApply(list, res.serverTime).then(function() { return list.length; });
       });
-  }).catch(function(e) { console.log('bgSync skip:', e.message); })
-    .then(function() { bgBusy = false; });
+  }).then(function(n) {
+    if (show) return idbCount().then(function(total) {
+      setResult('✅ Sync selesai. Diterima ' + n + ' profil.\nTotal di HP: ' + total, 'ok');
+    });
+  }).catch(function(e) {
+    console.log('bgSync gagal:', e.message);
+    if (show) setResult('❌ Sync gagal: ' + e.message, 'err');
+  }).then(function() { bgBusy = false; });
+}
+
+function idbCount() {
+  return idb().then(function(db) {
+    return new Promise(function(res, rej) {
+      var q = db.transaction('profiles').objectStore('profiles').count();
+      q.onsuccess = function() { res(q.result); };
+      q.onerror = function() { rej(q.error); };
+    });
+  });
 }
 setInterval(bgSync, BG_INTERVAL);
 window.addEventListener('online', bgSync);
@@ -1092,12 +1117,18 @@ function handleOfflineScan(id) {
       setResult('❌ ID ' + id + ' tidak ada di data lokal.\nData belum tersinkron atau ID salah.', 'err');
       setDot('err');
     } else {
-      var q = qGet();
-      q.push({ qid: ts + '-' + Math.random().toString(36).slice(2, 8), id: id, ts: ts });
-      qSet(q);
-      setResult('✅ (OFFLINE) ' + p.nama + '\nKapal: ' + p.kapal + '\nID: ' + id +
-                '\nJam: ' + new Date(ts).toLocaleTimeString('id-ID'), 'ok');
-      setDot('on');
+      var q = qGet(), last = null;
+      for (var i = q.length - 1; i >= 0; i--) { if (q[i].id === id) { last = q[i]; break; } }
+      if (last && ts - last.ts < 10 * 60 * 1000) {
+        setResult('⚠️ ' + p.nama + ' sudah discan ' + Math.floor((ts - last.ts) / 60000) + ' menit lalu.\nTunggu minimal 10 menit untuk check-out.', 'err');
+        setDot('err');
+      } else {
+        q.push({ qid: ts + '-' + Math.random().toString(36).slice(2, 8), id: id, ts: ts });
+        qSet(q);
+        setResult('✅ (OFFLINE) ' + p.nama + '\nKapal: ' + p.kapal + '\nID: ' + id +
+                  '\nJam: ' + new Date(ts).toLocaleTimeString('id-ID'), 'ok');
+        setDot('on');
+      }
     }
     cooldownUntil = Date.now() + 1500;
     setTimeout(function() { isProcessing = false; }, 1500);
@@ -1119,7 +1150,7 @@ function syncQueue() {
   fetch(gasUrl, {
     method: 'POST', redirect: 'follow',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // hindari preflight CORS
-    body: JSON.stringify({ action: 'sync_batch', items: q.slice(0, 50) })
+    body: JSON.stringify({ action: 'sync_batch', items: q.slice(0, 20) })
   })
   .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
   .then(function(res) {
@@ -1144,7 +1175,15 @@ document.getElementById('btn-offline').addEventListener('click', function() {
   isOfflineMode = !isOfflineMode;
   this.textContent = isOfflineMode ? '📴 Offline: ON' : '📴 Offline: OFF';
   this.classList.toggle('on', isOfflineMode);
-  setResult(isOfflineMode ? '📴 Mode Offline ON\nScan dibaca dari data lokal, dicatat ke antrean.' : '📷 Mode Online. Scan langsung ke server.', 'info');
+  if (!isOfflineMode) { setResult('📷 Mode Online. Scan langsung ke server.', 'info'); return; }
+  idbCount().then(function(n) {
+    if (n === 0) {
+      setResult('⚠️ Data lokal masih kosong. Mencoba menarik dari server…', 'loading');
+      bgSync(true);
+    } else {
+      setResult('📴 Mode Offline ON\n' + n + ' profil tersimpan di HP.', 'info');
+    }
+  });
 });
 if (checkSetup()) startCamera();
 
