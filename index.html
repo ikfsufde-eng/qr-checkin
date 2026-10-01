@@ -1117,8 +1117,14 @@ function handleOfflineScan(id) {
       setResult('❌ ID ' + id + ' tidak ada di data lokal.\nData belum tersinkron atau ID salah.', 'err');
       setDot('err');
     } else {
-      var q = qGet(), last = null;
-      for (var i = q.length - 1; i >= 0; i--) { if (q[i].id === id) { last = q[i]; break; } }
+      // [PERBAIKAN PENTING]: Tambahkan || [] agar tidak null saat pertama kali scan
+      var q = qGet() || []; 
+      var last = null;
+      
+      for (var i = q.length - 1; i >= 0; i--) { 
+        if (q[i].id === id) { last = q[i]; break; } 
+      }
+      
       if (last && ts - last.ts < 10 * 60 * 1000) {
         setResult('⚠️ ' + p.nama + ' sudah discan ' + Math.floor((ts - last.ts) / 60000) + ' menit lalu.\nTunggu minimal 10 menit untuk check-out.', 'err');
         setDot('err');
@@ -1132,8 +1138,9 @@ function handleOfflineScan(id) {
     }
     cooldownUntil = Date.now() + 1500;
     setTimeout(function() { isProcessing = false; }, 1500);
-  }).catch(function() {
-    setResult('❌ Gagal baca data lokal.', 'err');
+  }).catch(function(e) {
+    console.error(e); // [PERBAIKAN]: Tampilkan pesan error di console HP agar mudah dilacak
+    setResult('❌ Gagal menyimpan/membaca data lokal (Error Offline).', 'err');
     isProcessing = false;
   });
 }
