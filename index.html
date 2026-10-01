@@ -355,6 +355,13 @@ header        { animation: fadeUp .4s ease both .05s; }
 #btn-offline { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
 #btn-offline.on { background: #422006; color: #fcd34d; border-color: var(--warn); }
 #btn-sync { background: #0c4a6e; color: #7dd3fc; border: 1px solid var(--accent2); }
+#btn-cek-status {
+flex-shrink: 0; padding: 12px 10px; background: var(--surface2);
+color: var(--accent2); font-family: var(--font-head);
+font-weight: 700; font-size: 13px; border: 1px solid var(--accent2);
+border-radius: 10px; cursor: pointer;
+}
+#btn-cek-status:active { transform: scale(0.96); opacity: .8; }
 </style>
 </head>
 <body>
@@ -472,6 +479,7 @@ header        { animation: fadeUp .4s ease both .05s; }
     <div class="manual-row">
       <input id="manual-input" type="text" placeholder="Ketik ID, contoh: A-223344" autocomplete="off" spellcheck="false">
       <button id="btn-manual">Kirim</button>
+      <button id="btn-cek-status">Cek ON/OFF</button>
     </div>
   </div>
 
@@ -976,6 +984,34 @@ document.getElementById('btn-allow').addEventListener('click', function() { show
 // ═══════════════════════════════════════════
 //  INPUT MANUAL
 // ═══════════════════════════════════════════
+document.getElementById('btn-manual').addEventListener('click', submitManual);
+
+document.getElementById('btn-cek-status').addEventListener('click', function() {
+  var idToCheck = document.getElementById('manual-input').value.trim() || lastScanned;
+  if (!idToCheck) {
+    setResult('⚠️ Ketik ID atau scan QR dulu untuk cek status.', 'err');
+    return;
+}
+
+isProcessing = true;
+setResult('⏳ Mengecek status: ' + idToCheck + '...', 'loading');
+
+var url = "https://script.google.com/macros/s/AKfycbyIkDej3qauwaYyPRwZzqoVnGDPhJKfjx1wT4sJrv-JTl0JQ2AOB-YLeKGlhLswagnD4w/exec?id=" + encodeURIComponent(idToCheck);
+
+fetch(url)
+  .then(function(r) { return r.json(); })
+  .then(function(res) {
+// Menampilkan balasan JSON dengan format rapi
+    setResult("🔎 HASIL CEK (" + idToCheck + "):\n" + JSON.stringify(res, null, 2), 'info');
+    document.getElementById('manual-input').value = '';
+    setTimeout(function() { isProcessing = false; }, 2000);
+  })
+  .catch(function(err) {
+    setResult('❌ Gagal cek status. Pastikan internet aktif.', 'err');
+    setTimeout(function() { isProcessing = false; }, 2000);
+  });
+}); 
+  
 function submitManual() {
   var val = document.getElementById('manual-input').value.trim();
   if (!val) { setResult('⚠️ Ketik ID terlebih dahulu.', 'err'); return; }
