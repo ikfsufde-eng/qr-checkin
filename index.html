@@ -158,7 +158,7 @@ header {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
   pointer-events: none;
-  z-index: 5;
+  z-index: 5;fr
 }
 .vf {
   width: min(260px, 68vw);
@@ -362,6 +362,22 @@ font-weight: 700; font-size: 13px; border: 1px solid var(--accent2);
 border-radius: 10px; cursor: pointer;
 }
 #btn-cek-status:active { transform: scale(0.96); opacity: .8; }
+.btn-header-cam {
+  background: #052e1c;
+  color: #6ee7b7;
+  border: 1px solid var(--accent);
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: var(--font-head);
+  flex-shrink: 0;
+  transition: transform .1s, opacity .15s;
+}
+.btn-header-cam:active { transform: scale(0.95); opacity: .8; }
+
+
 </style>
 </head>
 <body>
@@ -438,6 +454,9 @@ border-radius: 10px; cursor: pointer;
       <h1>QR Check-in</h1>
       <p id="url-label">Menghubungkan…</p>
     </div>
+    <!-- Tombol Kamera ON/OFF di Header -->
+
+    <button id="btn-toggle-cam" class="btn-header-cam">Kamera: ON</button>
     <div class="pulse-dot" id="dot"></div>
   </header>
 
@@ -1377,6 +1396,39 @@ document.getElementById('btn-test-system').addEventListener('click', async funct
 
   }, 1000);
 });
+  
+var isHeaderCamOff = false;
+
+document.getElementById('btn-toggle-cam').addEventListener('click', function() {
+  isHeaderCamOff = !isHeaderCamOff;
+  var btn = this;
+  if (isHeaderCamOff) {
+// Matikan kamera total
+    if (stream) {
+      stream.getTracks().forEach(function(t) { t.stop(); });
+    }
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+    video.srcObject = null;
+  
+  // Ubah tampilan tombol jadi merah (OFF)
+    btn.textContent = 'Kamera: OFF';
+    btn.style.background = '#2d0a14';
+    btn.style.color = '#fda4af';
+    btn.style.borderColor = '#7f1d1d';
+    setResult('📴 Kamera dimatikan.', 'err');
+    setDot('err');
+  } else {
+  // Hidupkan kembali kamera
+    btn.textContent = 'Kamera: ON';
+    btn.style.background = '#052e1c';
+    btn.style.color = '#6ee7b7';
+    btn.style.borderColor = 'var(--accent)';
+    startCamera();
+  }
+});   
 </script>
 </body>
 </html>
