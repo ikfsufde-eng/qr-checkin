@@ -1068,24 +1068,38 @@ document.getElementById('manual-input').addEventListener('keydown', function(e) 
 // ═══════════════════════════════════════════
 document.getElementById('btn-force-update').addEventListener('click', function() {
   if (!confirm("⚠️ PERHATIAN!\n\nProses ini akan menarik ID baru dari Google Spreadsheet ke Firebase sekaligus memperbarui memori Offline di HP.\n\nYakin ingin melanjutkan?")) return;
-  
+
   isProcessing = true;
-  setResult('⏳ Menyedot data baru dari Spreadsheet ke Firebase... Mohon tunggu...', 'loading');
+  setResult('⏳ Menyedot data baru dari Sheet ke Firebase... Mohon tunggu...', 'loading');
   setDot('');
 
-  callGAS('force_update_all', '', 
+  callGAS('force_update_all', '',
     function(res) {
       if (res && res.status === 'success') {
-        setResult(res.message + '\n⏳ Memperbarui memori Offline di HP...', 'ok');
+        setResult('✅ Server tersinkron!\n⏳ Menyimpan data ke memori HP...', 'ok');
         setDot('on');
-        // Langsung paksa Full Sync (forceFull = true) ke IndexedDB HP
-        bgSync(true, true);
+        
+        // Panggil bgSync secara diam-diam (verbose=false) agar UI tidak tertimpa,
+        // lalu gabungkan datanya setelah sinkronisasi selesai (.then)
+        bgSync(false, true).then(function() {
+          idbCount().then(function(totalLokal) {
+            var msg = "✅ UPDATE PAKSA SELESAI\n";
+            if (res.data) {
+              msg += "Sheet: " + res.data.sheet + " | Firebase: " + res.data.firebase + "\n";
+              msg += "Diperbarui: " + res.data.diperbarui + " | HP: " + totalLokal;
+            } else {
+              msg += res.message + "\nTotal di HP: " + totalLokal;
+            }
+            setResult(msg, 'ok');
+          });
+        });
+
       } else {
         setResult((res && res.message) || 'Gagal update paksa.', 'err');
         setDot('err');
       }
-      cooldownUntil = Date.now() + 2000;
-      setTimeout(function() { isProcessing = false; setDot('on'); }, 2000);
+      cooldownUntil = Date.now() + 3000;
+      setTimeout(function() { isProcessing = false; setDot('on'); }, 3000);
     },
     function(errMsg) {
       setResult('❌ Gagal menghubungi server saat Update Paksa:\n' + errMsg, 'err');
@@ -1162,35 +1176,40 @@ function updateBadge() { document.getElementById('btn-sync').textContent = '☁�
 // [PERBAIKAN] Tambahkan parameter forceFull untuk narik semua data (since=0)
 function bgSync(verbose, forceFull) {
   var show = (verbose === true);
-  if (!gasUrl) { if (show) setResult('❌ GAS URL belum diatur.', 'err'); return; }
-  if (!navigator.onLine) { if (show) setResult('📴 Tidak ada sinyal, menggunakan data lokal yang sudah tersimpan.', 'err'); return; }
-  if (bgBusy) { if (show) setResult('⏳ Sync sedang berjalan, tunggu sebentar.', 'loading'); return; }
-  if (isProcessing && !show && !forceFull) return;
+  if (!gasUrl) { if (show) setResult('❌ GAS URL belum diatur.', 'err'); return Promise.resolve(0); }
+  if (!navigator.onLine) { if (show) setResult('📴 Tidak ada sinyal, menggunakan data lokal yang sudah tersimpan.', 'err'); return Promise.resolve(0); }
+  if (bgBusy) { if (show) setResult('⏳ Sync sedang berjalan, tunggu sebentar.', 'loading'); return Promise.resolve(0); }
+  if (isProcessing && !show && !forceFull) return Promise.resolve(0);
   bgBusy = true;
   if (show) setResult('⏳ Menarik data profil terbaru dari server…', 'loading');
 
-  idbGet('meta', 'lastSync').then(function(m) {
-    var stale = !m || (Date.now() - (m.v || 0) > 24 * 3600 * 1000);   // full ulang tiap >24 jam
+  return idbGet('meta', 'lastSync').then(function(m) {
+    var stale = !m || (Date.now() - (m.v || 0) > 24 * 3600 * 1000);
     var since = (forceFull || stale) ? 0 : (m.v || 0);
     return fetchT(gasUrl + '?action=get_profiles&since=' + since + '&_t=' + Date.now(), { redirect: 'follow', cache: 'no-store' }, 30000)
       .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function(res) {
         if (!res || res.status !== 'success') {
-          throw new Error((res && res.message) || 'Respons bukan success (Pastikan GAS sudah di-deploy versi baru)');
+          throw new Error((res && res.message) || 'Respons bukan success');
         }
         var list = res.profiles || [];
         return idbApply(list, res.serverTime, since === 0).then(function() { return list.length; });
       });
   }).then(function(n) {
-    if (show) return idbCount().then(function(total) {
-      setResult('✅ Memori Offline siap!\nDiperbarui: ' + n + ' profil.\nTotal tersimpan di HP: ' + total + ' profil.', 'ok');
-    });
+    if (show) {
+       idbCount().then(function(total) {
+          setResult('✅ Memori Offline siap!\nDiperbarui: ' + n + ' profil.\nTotal tersimpan di HP: ' + total + ' profil.', 'ok');
+       });
+    }
+    bgBusy = false;
+    return n; 
   }).catch(function(e) {
     console.log('bgSync gagal:', e.message);
     if (show) setResult('❌ Sync profil gagal: ' + e.message, 'err');
-  }).then(function() { bgBusy = false; });
+    bgBusy = false;
+    return 0;
+  });
 }
-
 setInterval(function() { bgSync(false, false); }, BG_INTERVAL);
 window.addEventListener('online', function() { bgSync(false, false); });
 document.addEventListener('visibilitychange', function() { if (!document.hidden) bgSync(false, false); });
