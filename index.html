@@ -429,23 +429,32 @@ border-radius: 10px; cursor: pointer;
 
   // 3. Aksi saat tombol "Simpan & Mulai Scanner" diklik
   document.getElementById('btn-save-url').addEventListener('click', function() {
-    const inputUrl = document.getElementById('gas-url-input').value.trim();
-    
-    if (inputUrl === "") {
-      alert("URL tidak boleh kosong!");
-      return;
-    }
-    
-    // Simpan URL ke penyimpanan browser
-    localStorage.setItem('gas_url', inputUrl);
-    
-    // Sembunyikan layar setup dan mulai fungsi scanner Anda
-    // document.getElementById('setup-screen').style.display = 'none';
-    alert("URL berhasil disimpan! Scanner siap dimulai.");
-    
-    // Panggil fungsi untuk menyalakan kamera/scanner di sini
-    // startScanner(); 
-  });
+  var val = document.getElementById('gas-url-input').value.trim();
+  if (!val) { alert('❌ URL tidak boleh kosong.'); return; }
+  if (!val.startsWith('https://script.google.com/')) {
+    alert('❌ URL tidak valid. Harus dari Google Apps Script.'); return;
+  }
+  if (val.includes('/dev') || val.includes('/edit')) {
+    alert('❌ Gunakan URL deployment berakhiran "/exec", bukan /dev atau /edit.'); return;
+  }
+  gasUrl = val;
+  localStorage.setItem(STORAGE_KEY, gasUrl);
+  localStorage.setItem('gas_url', gasUrl);
+  
+  // 1. Sembunyikan layar setup
+  showSetup(false);
+  
+  // 2. Perbarui label URL di header
+  updateUrlLabel();
+  
+  // 3. Tarik data profil offline di background
+  bgSync(false, true); 
+  
+  // 4. NYALAKAN KAMERA SEKARANG
+  setTimeout(function() {
+    startCamera();
+  }, 300); // Beri jeda sedikit agar UI transisi mulus
+});
 </script>
   
   <header>
