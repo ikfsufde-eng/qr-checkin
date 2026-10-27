@@ -1237,7 +1237,138 @@ document.getElementById('btn-offline').addEventListener('click', function() {
     }
   });
 });
+// ═══════════════════════════════════════════
+//  TES FUNGSIONAL (DIAGNOSTIK SISTEM)
+// ═══════════════════════════════════════════
+document.getElementById('btn-test-system').addEventListener('click', async function() {
+  if (isProcessing) {
+    alert("Tunggu proses saat ini selesai sebelum menjalankan tes.");
+    return;
+  }
 
+  isProcessing = true;
+  setDot('');
+  setResult('🩺 Memulai diagnostik sistem...\nMohon tunggu...', 'loading');
+
+  var logs = [];
+  var errorCount = 0;
+
+  function addLog(msg, isError, solution) {
+    var icon = isError ? '❌ ' : '✅ ';
+    logs.push(icon + msg);
+    if (isError && solution) {
+      logs.push('    💡 ' + solution);
+      errorCount++;
+    } else if (isError) {
+      errorCount++;
+    }
+    setResult('🩺 Diagnostik berjalan...\n\n' + logs.join('\n'), 'loading');
+  }
+
+  if (window.isSecureContext) {
+    addLog('Protokol keamanan (HTTPS) valid.');
+  } else {
+    addLog('Koneksi tidak aman (HTTP).', true, 'Kamera tidak akan bisa menyala. Pastikan mengakses link dengan awalan https://');
+  }
+
+  try {
+    localStorage.setItem('test_mem', '1');
+    localStorage.removeItem('test_mem');
+    addLog('Memori browser (Local Storage) aktif.');
+  } catch (e) {
+    addLog('Memori browser diblokir.', true, 'Matikan Mode Penyamaran (Incognito/Private).');
+  }
+
+  if (!gasUrl) {
+    addLog('GAS URL belum dikonfigurasi.', true, 'Klik ⚙️ Config dan masukkan URL.');
+  } else {
+    addLog('GAS URL terkonfigurasi dengan baik.');
+  }
+
+  if (barcodeDetector) {
+    addLog('Scanner API (Native) siap digunakan.');
+  } else if (jsQRLib || window.jsQR) {
+    addLog('Scanner (jsQR Fallback) siap.');
+  } else {
+    addLog('Library Scanner gagal dimuat.', true, 'Periksa koneksi internet lalu muat ulang (refresh).');
+  }
+
+  if (!stream || !stream.active) {
+    addLog('Kamera tidak aktif / izin ditolak.', true, 'Izinkan akses kamera di pengaturan browser.');
+  } else {
+    addLog('Kamera terhubung (' + video.videoWidth + 'x' + video.videoHeight + ').');
+  }
+
+  if (gasUrl) {
+    addLog('Menguji kecepatan koneksi ke server...');
+    try {
+      var startTime = Date.now();
+      var testUrl = gasUrl + (gasUrl.includes('?') ? '&' : '?') + 'pingtest=' + startTime;
+      await fetch(testUrl, { method: 'GET', mode: 'no-cors', cache: 'no-store' });
+      var latency = Date.now() - startTime;
+      
+      logs.pop();
+      
+      if (latency > 4000) {
+        addLog('Jaringan sangat lambat (' + latency + 'ms).', true, 'Rentang Timeout, proses absen akan memakan waktu lebih lama.');
+      } else if (latency > 2000) {
+        addLog('Jaringan kurang optimal (' + latency + 'ms).');
+      } else {
+        addLog('Koneksi server sangat cepat (' + latency + 'ms).');
+      }
+    } catch (e) {
+      logs.pop();
+      addLog('Gagal menjangkau server.', true, 'Pastikan HP Anda terhubung ke jaringan internet.');
+    }
+  }
+
+  setTimeout(function() {
+    if (errorCount === 0) {
+      setResult('🩺 TES SELESAI: Sistem berjalan normal.\n\n' + logs.join('\n'), 'ok');
+      setDot('on');
+    } else {
+      setResult('🩺 TES SELESAI: Ditemukan ' + errorCount + ' peringatan/masalah.\n\n' + logs.join('\n'), 'err');
+      setDot('err');
+    }
+    
+    cooldownUntil = Date.now() + 8000;
+    setTimeout(function() {
+      isProcessing = false;
+      if (errorCount === 0) setResult('📷 Kamera siap. Arahkan ke QR Code.', 'info');
+    }, 8000);
+  }, 1000);
+});
+
+// ═══════════════════════════════════════════
+//  TOGGLE KAMERA (HEADER)
+// ═══════════════════════════════════════════
+var isHeaderCamOff = false;
+document.getElementById('btn-toggle-cam').addEventListener('click', function() {
+  isHeaderCamOff = !isHeaderCamOff;
+  var btn = this;
+  if (isHeaderCamOff) {
+    if (stream) {
+      stream.getTracks().forEach(function(t) { t.stop(); });
+    }
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+    video.srcObject = null;
+    btn.textContent = 'Kamera: OFF';
+    btn.style.background = '#2d0a14';
+    btn.style.color = '#fda4af';
+    btn.style.borderColor = '#7f1d1d';
+    setResult('📴 Kamera dimatikan.', 'err');
+    setDot('err');
+  } else {
+    btn.textContent = 'Kamera: ON';
+    btn.style.background = '#052e1c';
+    btn.style.color = '#6ee7b7';
+    btn.style.borderColor = 'var(--accent)';
+    startCamera();
+  }
+});
 if (checkSetup()) startCamera();
 </script>
 </body>
