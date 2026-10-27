@@ -412,51 +412,7 @@ border-radius: 10px; cursor: pointer;
   </div>
 </div>
 
-<script>
-  // 1. URL Default Anda
-  const URL_DEFAULT = "https://script.google.com/macros/s/AKfycbyAzYf4WKgK5iADvk3GkS7CPyx1zhw7q2s5t7HVVbwAOpLXaHuzFPfoS8wa_oV1MN1L/exec";
-
-  // Cek apakah sebelumnya sudah ada URL yang disimpan, jika ada tampilkan di kotak
-  const savedUrl = localStorage.getItem('gas_url');
-  if (savedUrl) {
-    document.getElementById('gas-url-input').value = savedUrl;
-  }
-
-  // 2. Aksi saat tombol "Gunakan URL Default" diklik
-  document.getElementById('btn-use-default').addEventListener('click', function() {
-    document.getElementById('gas-url-input').value = URL_DEFAULT;
-  });
-
-  // 3. Aksi saat tombol "Simpan & Mulai Scanner" diklik
-  document.getElementById('btn-save-url').addEventListener('click', function() {
-  var val = document.getElementById('gas-url-input').value.trim();
-  if (!val) { alert('❌ URL tidak boleh kosong.'); return; }
-  if (!val.startsWith('https://script.google.com/')) {
-    alert('❌ URL tidak valid. Harus dari Google Apps Script.'); return;
-  }
-  if (val.includes('/dev') || val.includes('/edit')) {
-    alert('❌ Gunakan URL deployment berakhiran "/exec", bukan /dev atau /edit.'); return;
-  }
-  gasUrl = val;
-  localStorage.setItem(STORAGE_KEY, gasUrl);
-  localStorage.setItem('gas_url', gasUrl);
-  
-  // 1. Sembunyikan layar setup
-  showSetup(false);
-  
-  // 2. Perbarui label URL di header
-  updateUrlLabel();
-  
-  // 3. Tarik data profil offline di background
-  bgSync(false, true); 
-  
-  // 4. NYALAKAN KAMERA SEKARANG
-  setTimeout(function() {
-    startCamera();
-  }, 300); // Beri jeda sedikit agar UI transisi mulus
-});
-</script>
-  
+ 
   <header>
     <div class="logo">📡</div>
     <div class="header-text">
@@ -538,7 +494,7 @@ border-radius: 10px; cursor: pointer;
 //  CONFIG
 // ═══════════════════════════════════════════
 var STORAGE_KEY = 'qr_checkin_gas_url';
-var URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbyyPsGyTRUREUB2xLBM5FmR9E69Z8qfxjc-rAKbxOp_uFoAEgH9T94-PkJymqWiij9C/exec';
+var URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbyAzYf4WKgK5iADvk3GkS7CPyx1zhw7q2s5t7HVVbwAOpLXaHuzFPfoS8wa_oV1MN1L/exec';
 var gasUrl      = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('gas_url') || '';
 
 if (gasUrl && !localStorage.getItem(STORAGE_KEY)) {
