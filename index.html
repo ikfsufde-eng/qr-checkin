@@ -494,7 +494,7 @@ border-radius: 10px; cursor: pointer;
 //  CONFIG
 // ═══════════════════════════════════════════
 var STORAGE_KEY = 'qr_checkin_gas_url';
-var URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbzXBU9lNQYxQfpYf5xVoqeOSvLZt7aI3k2k9ChUScWQppcCAZx2hGq20GUq3cubK3Pc/exec';
+var URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbyVp3t8C8khE5MYeacFN6bSgDNmzUxy8mVr7HfnVGnr35fQiBaUb80uxxFHPqsZv8nP/exec';
 var gasUrl      = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('gas_url') || '';
 var CEK_URL     = 'https://script.google.com/macros/s/AKfycbyIkDej3qauwaYyPRwZzqoVnGDPhJKfjx1wT4sJrv-JTl0JQ2AOB-YLeKGlhLswagnD4w/exec?id=';
 var BERKAS_OLD  = 'https://script.google.com/macros/s/AKfycbzPTtwUl6RtXX3BBHg8f4LUnGj9Vf-lzHXl7zzesbuccTw5ekpTByGPb5cEnx84egUo/exec';
@@ -1255,6 +1255,7 @@ function handleOfflineScan(id) {
 }
 
 // ── Tombol Sync: kirim antrean offline ke server + tarik profil baru ──
+// ── Tombol Sync: kirim antrean offline ke server + tarik profil baru ──
 function syncQueue() {
   if (syncing) return;
   var q = qGet();
@@ -1281,8 +1282,20 @@ function syncQueue() {
     qSet(qGet().filter(function(x) { return !ok[x.qid]; }));
     syncing = false;
     var sisa = qGet().length;
+    
     if (sisa && res.accepted.length) { syncQueue(); return; }
-    setResult(sisa ? '⚠️ Sisa ' + sisa + ' data belum terkonfirmasi.' : '✅ Semua data scan offline berhasil masuk ke Server & Sheet!', sisa ? 'err' : 'ok');
+
+    // --- MENAMPILKAN PESAN NORMAL SEPERTI ONLINE ---
+    var finalMsg = "";
+    if (res.details && res.details.length > 0) {
+       // Gabungkan pesan jika ada beberapa data yang di-sync sekaligus
+       finalMsg = res.details.join('\n\n-------------------\n\n');
+       if (sisa) finalMsg += '\n\n⚠️ Sisa ' + sisa + ' data masih antre...';
+    } else {
+       finalMsg = sisa ? '⚠️ Sisa ' + sisa + ' data belum terkonfirmasi.' : '✅ Semua data scan offline tersinkron!';
+    }
+    
+    setResult(finalMsg, sisa ? 'err' : 'ok');
     bgSync(false, false);
   })
   .catch(function(e) {
