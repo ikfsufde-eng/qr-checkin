@@ -158,7 +158,7 @@ header {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
   pointer-events: none;
-  z-index: 5;fr
+  z-index: 5;
 }
 .vf {
   width: min(260px, 68vw);
@@ -496,6 +496,23 @@ border-radius: 10px; cursor: pointer;
 var STORAGE_KEY = 'qr_checkin_gas_url';
 var URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbyAzYf4WKgK5iADvk3GkS7CPyx1zhw7q2s5t7HVVbwAOpLXaHuzFPfoS8wa_oV1MN1L/exec';
 var gasUrl      = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('gas_url') || '';
+var CEK_URL     = 'https://script.google.com/macros/s/AKfycbyIkDej3qauwaYyPRwZzqoVnGDPhJKfjx1wT4sJrv-JTl0JQ2AOB-YLeKGlhLswagnD4w/exec?id=';
+var BERKAS_OLD  = 'https://script.google.com/macros/s/AKfycbzPTtwUl6RtXX3BBHg8f4LUnGj9Vf-lzHXl7zzesbuccTw5ekpTByGPb5cEnx84egUo/exec';
+var BERKAS_NEW  = 'https://script.google.com/macros/s/AKfycbyiD8iRCvsPfws2lzAcuuGtd52RE3aqtdv7Q4GeALqdCMi0eVN7_SFpPiYqU8s21i85/exec';
+var ID_RE       = /^[A-Za-z0-9\-_]{3,30}$/;   // harus sama dengan ID_PATTERN di server
+
+// fetch dengan timeout: tanpa ini UI bisa macet selamanya saat GAS lambat/sinyal jelek
+function fetchT(url, opts, ms) {
+  opts = opts || {};
+  if (typeof AbortController === 'undefined') return fetch(url, opts);
+  var ac = new AbortController();
+  var t = setTimeout(function() { ac.abort(); }, ms || 20000);
+  opts.signal = ac.signal;
+  return fetch(url, opts).then(
+    function(r) { clearTimeout(t); return r; },
+    function(e) { clearTimeout(t); throw (e && e.name === 'AbortError') ? new Error('Timeout (server lambat)') : e; }
+  );
+}
 
 if (gasUrl && !localStorage.getItem(STORAGE_KEY)) {
   localStorage.setItem(STORAGE_KEY, gasUrl);
@@ -629,6 +646,7 @@ function startCamera() {
   .then(function(s) {
     stream = s;
     video.srcObject = s;
+    requestWakeLock();
     try {
       var track = s.getVideoTracks()[0];
       var caps  = track.getCapabilities ? track.getCapabilities() : {};
@@ -691,6 +709,7 @@ var missStreak    = 0;
 var scanning      = false;
 
 function scanLoop() {
+  if (rafId) cancelAnimationFrame(rafId);
   rafId = requestAnimationFrame(function() {
     var now = Date.now();
     if (!isProcessing && !scanning && now >= cooldownUntil && now - lastScanTime >= SCAN_INTERVAL) {
@@ -756,6 +775,13 @@ document.getElementById('file-input').addEventListener('change', function(e) {
   reader.onload = function(event) {
     var img = new Image();
     img.onload = function() {
+      if (barcodeDetector) {
+        barcodeDetector.detect(img).then(function(codes) {
+          if (codes && codes.length && codes[0].rawValue) handleScan(codes[0].rawValue);
+          else setResult('❌ QR Code tidak ditemukan pada gambar.', 'err');
+        }).catch(function() { setResult('❌ Gagal membaca gambar.', 'err'); });
+        return;
+      }
       var tc = document.createElement('canvas');
       var tx = tc.getContext('2d');
       tc.width = img.width; tc.height = img.height;
@@ -780,6 +806,7 @@ function decodeToken(tokenStr) {
   try {
     if (!tokenStr.startsWith("ENC-")) return null;
     var hex = tokenStr.replace("ENC-", "").trim();
+    if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2) return null;
     var rawText = "";
     for (var i = 0; i < hex.length; i += 2) {
       var charCode = parseInt(hex.substr(i, 2), 16);
@@ -807,7 +834,7 @@ function callGAS(action, id, onSuccess, onError) {
   }
   var url = gasUrl + '?action=' + encodeURIComponent(action);
   if (id) url += '&id=' + encodeURIComponent(id);
-  fetch(url, { method: 'GET', redirect: 'follow', cache: 'no-store' })
+  fetchT(url, { method: 'GET', redirect: 'follow', cache: 'no-store' }, 25000)
     .then(function(r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
@@ -846,28 +873,42 @@ function handleScan(decodedText) {
 
   if (isModeBerkas) {
     isProcessing = true;
-    setResult('Membuka tautan berkas digital...', 'ok');
+    var newUrl = id.replace(BERKAS_OLD, BERKAS_NEW);
+    // Hanya izinkan tautan Apps Script (cegah QR berbahaya, mis. javascript:)
+    if (newUrl.indexOf('https://script.google.com/') !== 0) {
+      setResult('❌ QR bukan tautan berkas yang valid.', 'err');
+      setDot('err');
+      cooldownUntil = Date.now() + 2000;
+      setTimeout(function() { isProcessing = false; }, 2000);
+      return;
+    }
+    if (newUrl.indexOf('download=true') === -1) {
+      newUrl += (newUrl.indexOf('?') === -1 ? '?' : '&') + 'download=true';
+    }
     setDot('on');
-
-    var oldBase = "https://script.google.com/macros/s/AKfycbzPTtwUl6RtXX3BBHg8f4LUnGj9Vf-lzHXl7zzesbuccTw5ekpTByGPb5cEnx84egUo/exec";
-    var newBase = "https://script.google.com/macros/s/AKfycbyiD8iRCvsPfws2lzAcuuGtd52RE3aqtdv7Q4GeALqdCMi0eVN7_SFpPiYqU8s21i85/exec";
-
-    var newUrl = id;
-    if (newUrl.includes(oldBase)) {
-      newUrl = newUrl.replace(oldBase, newBase);
+    var w = window.open(newUrl, '_blank');   // dipanggil dari callback scan, bisa diblokir browser
+    if (w) {
+      setResult('✅ Berkas dibuka di tab baru.', 'ok');
+      setTimeout(function() { setResult('📷 Kamera siap. Arahkan ke QR Code.', 'info'); }, 2000);
+    } else {
+      var box = document.getElementById('result');
+      box.className = 'ok';
+      box.textContent = '⚠️ Popup diblokir browser.\n';
+      var lnk = document.createElement('a');
+      lnk.href = newUrl; lnk.target = '_blank'; lnk.rel = 'noopener';
+      lnk.style.color = '#7dd3fc'; lnk.textContent = '👉 Ketuk untuk membuka berkas';
+      box.appendChild(lnk);
     }
-    if (!newUrl.includes("download=true")) {
-      var separator = newUrl.includes("?") ? "&" : "?";
-      newUrl += separator + "download=true&id=" + encodeURIComponent(id);
-    }
-
-    window.open(newUrl, '_blank');
     cooldownUntil = Date.now() + 2000;
-    setTimeout(function() { 
-      isProcessing = false; 
-      setResult('📷 Kamera siap. Arahkan ke QR Code.', 'info'); 
-    }, 2000);
-    return; 
+    setTimeout(function() { isProcessing = false; }, 2000);
+    return;
+  }
+
+  if (!ID_RE.test(id)) {
+    setResult('❌ Format ID tidak valid:\n' + id.substring(0, 60), 'err');
+    setDot('err');
+    cooldownUntil = Date.now() + 1500;
+    return;
   }
 
   if (isOfflineMode) { handleOfflineScan(id); return; }
@@ -877,10 +918,10 @@ function handleScan(decodedText) {
     setResult('⏳ Mengecek status ID: ' + id + '...', 'loading');
     setDot('');
 
-    var cekUrl = "https://script.google.com/macros/s/AKfycbyIkDej3qauwaYyPRwZzqoVnGDPhJKfjx1wT4sJrv-JTl0JQ2AOB-YLeKGlhLswagnD4w/exec?id=" + encodeURIComponent(id);
+    var cekUrl = CEK_URL + encodeURIComponent(id);
 
-    fetch(cekUrl)
-      .then(function(r) { return r.text(); })
+    fetchT(cekUrl, {}, 20000)
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
       .then(function(res) {
         setResult("🔎 HASIL CEK (" + id + "):\n" + res, 'info');
         setDot('on');
@@ -908,6 +949,7 @@ function handleScan(decodedText) {
         setTimeout(function() { isProcessing = false; setDot('on'); }, 1500);
       } 
       else if (res && res.status === 'not_found') {
+        lastScanned = null;
         setResult(res.message, 'err');
         setDot('err');
         isProcessing = false; 
@@ -920,7 +962,7 @@ function handleScan(decodedText) {
       }
     },
     function(errMsg) {
-      setResult('❌ Gagal kirim ke server:\n' + errMsg + '\n\nPastikan GAS Web App sudah di-deploy\ndengan akses "Anyone".', 'err');
+      setResult('❌ Gagal kirim ke server:\n' + errMsg + '\n\nJika timeout: cek status dulu sebelum scan ulang (bisa jadi sudah tercatat).\nPastikan GAS Web App di-deploy dengan akses "Anyone".', 'err');
       setDot('err');
       cooldownUntil = Date.now() + 3000;
       setTimeout(function() { isProcessing = false; }, 3000);
@@ -976,7 +1018,8 @@ document.getElementById('btn-mode-berkas').addEventListener('click', function() 
 
 document.getElementById('btn-restart').addEventListener('click', function() {
   lastScanned = null; isProcessing = false; cooldownUntil = 0; missStreak = 0; scanning = false;
-  startCamera();
+  if (isHeaderCamOff) { document.getElementById('btn-toggle-cam').click(); }  // klik = nyalakan + startCamera
+  else startCamera();
 });
 
 document.getElementById('btn-copy').addEventListener('click', function() {
@@ -1060,16 +1103,23 @@ var QKEY = 'qr8_queue';
 var BG_INTERVAL = 5 * 60 * 1000; // Sinkron otomatis tiap 5 menit
 var isOfflineMode = false, bgBusy = false, syncing = false;
 
+var _dbp = null;
 function idb() {
-  return new Promise(function(res, rej) {
+  if (_dbp) return _dbp;
+  _dbp = new Promise(function(res, rej) {
     var r = indexedDB.open('qr8db', 1);
     r.onupgradeneeded = function() {
       r.result.createObjectStore('profiles', { keyPath: 'id' });
       r.result.createObjectStore('meta', { keyPath: 'k' });
     };
-    r.onsuccess = function() { res(r.result); };
-    r.onerror = function() { rej(r.error); };
+    r.onsuccess = function() {
+      var db = r.result;
+      db.onversionchange = function() { db.close(); _dbp = null; };
+      res(db);
+    };
+    r.onerror = function() { _dbp = null; rej(r.error); };
   });
+  return _dbp;
 }
 function idbGet(store, key) {
   return idb().then(function(db) {
@@ -1080,11 +1130,12 @@ function idbGet(store, key) {
     });
   });
 }
-function idbApply(profiles, serverTime) {
+function idbApply(profiles, serverTime, full) {
   return idb().then(function(db) {
     return new Promise(function(res, rej) {
       var tx = db.transaction(['profiles', 'meta'], 'readwrite');
       var ps = tx.objectStore('profiles');
+      if (full && profiles.length) ps.clear();   // buang profil yang sudah dihapus di server
       profiles.forEach(function(p) {
         if (p.deleted) ps.delete(p.id); else ps.put(p);
       });
@@ -1105,7 +1156,7 @@ function idbCount() {
 }
 
 function qGet() { try { return JSON.parse(localStorage.getItem(QKEY) || '[]'); } catch(e) { return []; } }
-function qSet(a) { localStorage.setItem(QKEY, JSON.stringify(a)); updateBadge(); }
+function qSet(a) { try { localStorage.setItem(QKEY, JSON.stringify(a)); } catch(e) { alert('❌ Memori HP penuh! Antrean gagal disimpan. Segera Sync.'); } updateBadge(); }
 function updateBadge() { document.getElementById('btn-sync').textContent = '☁️ Sync (' + qGet().length + ')'; }
 
 // [PERBAIKAN] Tambahkan parameter forceFull untuk narik semua data (since=0)
@@ -1119,15 +1170,16 @@ function bgSync(verbose, forceFull) {
   if (show) setResult('⏳ Menarik data profil terbaru dari server…', 'loading');
 
   idbGet('meta', 'lastSync').then(function(m) {
-    var since = (forceFull || !m) ? 0 : (m.v || 0);
-    return fetch(gasUrl + '?action=get_profiles&since=' + since + '&_t=' + Date.now(), { redirect: 'follow', cache: 'no-store' })
+    var stale = !m || (Date.now() - (m.v || 0) > 24 * 3600 * 1000);   // full ulang tiap >24 jam
+    var since = (forceFull || stale) ? 0 : (m.v || 0);
+    return fetchT(gasUrl + '?action=get_profiles&since=' + since + '&_t=' + Date.now(), { redirect: 'follow', cache: 'no-store' }, 30000)
       .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function(res) {
         if (!res || res.status !== 'success') {
           throw new Error((res && res.message) || 'Respons bukan success (Pastikan GAS sudah di-deploy versi baru)');
         }
         var list = res.profiles || [];
-        return idbApply(list, res.serverTime).then(function() { return list.length; });
+        return idbApply(list, res.serverTime, since === 0).then(function() { return list.length; });
       });
   }).then(function(n) {
     if (show) return idbCount().then(function(total) {
@@ -1143,7 +1195,7 @@ setInterval(function() { bgSync(false, false); }, BG_INTERVAL);
 window.addEventListener('online', function() { bgSync(false, false); });
 document.addEventListener('visibilitychange', function() { if (!document.hidden) bgSync(false, false); });
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
-setTimeout(function() { bgSync(false, true); }, 2000); // Saat aplikasi pertama dibuka, pastikan semua profil lengkap
+setTimeout(function() { bgSync(false, false); }, 2000); // Saat aplikasi pertama dibuka, pastikan semua profil lengkap
 updateBadge();
 
 // ── Scan saat mode offline ──
@@ -1196,11 +1248,11 @@ function syncQueue() {
   syncing = true;
   setResult('⏳ Mengirim ' + q.length + ' data scan ke server…', 'loading');
 
-  fetch(gasUrl, {
+  fetchT(gasUrl, {
     method: 'POST', redirect: 'follow',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ action: 'sync_batch', items: q.slice(0, 5) })
-  })
+  }, 60000)
   .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
   .then(function(res) {
     if (!res || res.status !== 'success' || !Array.isArray(res.accepted))
@@ -1235,7 +1287,7 @@ document.getElementById('btn-offline').addEventListener('click', function() {
     } else {
       setResult('📴 Mode Offline ON\n' + n + ' profil siap digunakan di HP.', 'ok');
     }
-  });
+  }).catch(function(e) { setResult('❌ Memori lokal tidak bisa diakses: ' + e.message, 'err'); });
 });
 // ═══════════════════════════════════════════
 //  TES FUNGSIONAL (DIAGNOSTIK SISTEM)
@@ -1368,6 +1420,18 @@ document.getElementById('btn-toggle-cam').addEventListener('click', function() {
     btn.style.borderColor = 'var(--accent)';
     startCamera();
   }
+});
+var wakeLock = null;
+function requestWakeLock() {
+  try {
+    if (navigator.wakeLock) navigator.wakeLock.request('screen').then(function(l) { wakeLock = l; }).catch(function() {});
+  } catch(e) {}
+}
+document.addEventListener('visibilitychange', function() {
+  if (document.hidden || isHeaderCamOff || !gasUrl) return;
+  requestWakeLock();
+  var tr = stream && stream.getVideoTracks()[0];
+  if (!tr || tr.readyState !== 'live') startCamera();   // kamera dimatikan OS saat tab di background
 });
 if (checkSetup()) startCamera();
 </script>
